@@ -1,7 +1,4 @@
 -- Taranis Q X7 iNav Flight Status Panel - v1.0
--- Updates:
--- v1.0 09/05/2017
---  Initial release
 -- Author: teckel12
 -- https://github.com/teckel12/Taranis-iNav-Lua
 -- Telemetry distance sensor name must be changed from '0420' to 'Dist'
