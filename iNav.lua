@@ -39,7 +39,7 @@ local function displayLat(coord)
   if (coord > 1) then
     ext = "S"
   end
-  return string.format("%10.4f", math.abs(coord) * 60) .. ext
+  return string.format("%10.4f", math.abs(coord)) .. ext
 end
 
 local function displayLon(coord)
@@ -47,7 +47,7 @@ local function displayLon(coord)
   if (coord > 1) then
     ext = "E"
   end
-  return string.format("%10.4f", math.abs(coord) * 60) .. ext
+  return string.format("%10.4f", math.abs(coord)) .. ext
 end
 
 local function run(event)
@@ -58,8 +58,11 @@ local function run(event)
   lcd.drawText(0 , 0, modelName, INVERS)
   lcd.drawNumber(84, 0, getValue("tx-voltage") * 10, PREC1 + INVERS)
   lcd.drawText(lcd.getLastPos(), 0, "V", INVERS)
-  lcd.drawNumber(111, 0, getValue("RxBt") * 10, PREC1 + INVERS)
-  lcd.drawText(lcd.getLastPos(), 0, "V", INVERS)
+  rxBatt = getValue("RxBt")
+  if (rxBatt) then
+    lcd.drawNumber(111, 0, rxBatt * 10, PREC1 + INVERS)
+    lcd.drawText(lcd.getLastPos(), 0, "V", INVERS)
+  end
 
   -- *** Initial warning if there's no telemetry ***
   mode = getValue("Tmp1")
@@ -169,7 +172,7 @@ local function run(event)
         showHold = false
       end
       if (modeA >= 4) then
-        flightMode = "FAIL!"
+        flightMode = "FAILSAFE"
         extra = BLINK + INVERS
         showHold = false
       end
@@ -183,7 +186,7 @@ local function run(event)
     end
     modePrev = flightMode
 
-    -- *** Direction ***
+    -- *** Directional indicator ***
     if (mode > 0) then
       if (armed) then
         if (armedPrev == false) then
@@ -229,11 +232,10 @@ local function run(event)
     end
 
     -- *** Display flight mode (centered) ***
-    displayMode = flightMode
-    lcd.drawText(47, 34, displayMode, SMLSIZE + extra)
+    lcd.drawText(47, 34, flightMode, SMLSIZE + extra)
     pos = 47 + (87 - lcd.getLastPos()) / 2
     lcd.drawFilledRectangle(46, 33, 40, 10, ERASE)
-    lcd.drawText(pos, 33, displayMode, SMLSIZE + extra)
+    lcd.drawText(pos, 33, flightMode, SMLSIZE + extra)
 
     -- *** Data ***
     if (armed) then
