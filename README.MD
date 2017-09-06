@@ -20,7 +20,7 @@ Flight status panel for Taranis Q X7 transmitter when running iNav
 ### From Transmitter
 
 * Telemetry distance sensor name must be changed from `0420` to `Dist`
-* Sensors must be changed to US measurements (f/s to mph, etc)
+* Sensors must be changed to US measurements (m to ft, km/h to mph, etc)
 
 ## Release History
 
