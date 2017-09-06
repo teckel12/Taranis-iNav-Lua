@@ -15,11 +15,27 @@
 --LCD_W = 128 Q X7 / 212 X9D
 --LCD_H = 64
 
-local flightMode = ""
-local modePrev = ""
+local modeIdPrev = false
 local armedPrev = false
+local headingHoldPrev = false
+local altHoldPrev = false
 local headingRef = 0
 local noTelemWarn = false
+local altitudeNextPlay = 0
+
+local modes = {
+  { "NO TELEM", BLINK + INVERS, false, false },
+  { "HORIZON", 0, true, "hrznmd.wav" },
+  { "ANGLE", 0, true, "anglmd.wav" },
+  { "ACRO", 0, true, "acromd.wav" },
+  { " NOT OK ", BLINK + INVERS, false, false },
+  { "READY", 0, false, false },
+  { "POS HOLD", 0, true, "poshld.wav" },
+  { "3D HOLD", 0, true, "3dhold.wav" },
+  { "WAYPOINT", 0, false, "waypt.wav" },
+  { "   RTH   ", BLINK + INVERS, false, "rtl.wav" },
+  { "FAILSAFE", BLINK + INVERS, false, "fson.wav" },
+}
 
 local function init()
   -- init is called once when model is loaded
@@ -95,7 +111,7 @@ local function run(event)
     headFree = false
     headingHold = false
     altHold = false
-    showHold = true
+    modeId = 1
     extra = 0
     armed = false
     ok2arm = false
@@ -117,26 +133,21 @@ local function run(event)
           modeD = modeD - 4
         end
         if (modeD == 2) then
-          flightMode = "HORIZON"
+          modeId = 2
         elseif (modeD == 1) then
-          flightMode = "ANGLE"
+          modeId = 3
         else
-          flightMode = "ACRO"
+          modeId = 4
         end
       else
         armed = false
       end
       if (modeE >= 2 or modeE == 0) then
-        flightMode = "NOT OK"
-        extra = BLINK + INVERS
-        showHold = false
+        modeId = 5
       else
         ok2arm = true
-        extra = 0
-        showHold = true
         if (armed == false) then
-          flightMode = "READY"
-          showHold = false
+          modeId = 6
         end
       end
       if (modeB >= 4) then
@@ -146,7 +157,7 @@ local function run(event)
       if (modeC >= 4) then
         modeC = modeC - 4
         if (armed == true) then
-          flightMode = "POS HOLD"
+          modeId = 7
           posHold = true
         end
       end
@@ -154,7 +165,7 @@ local function run(event)
         modeC = modeC - 2
         altHold = true
         if (posHold) then
-          flightMode = "3D HOLD"
+          modeId = 8
         end
       end
       if (modeC == 1) then
@@ -162,29 +173,15 @@ local function run(event)
       end  
       if (modeB >= 2) then
         modeB = modeB - 2
-        flightMode = "WAYPOINT"
-        extra = BLINK + INVERS
-        showHold = false
+        modeId = 9
       end
       if (modeB == 1) then
-        flightMode = "RTH"
-        extra = BLINK + INVERS
-        showHold = false
+        modeId = 10
       end
       if (modeA >= 4) then
-        flightMode = "FAILSAFE"
-        extra = BLINK + INVERS
-        showHold = false
+        modeId = 11
       end
-    else
-      flightMode = "NO TELEM"
-      extra = BLINK + INVERS
-      showHold = false
     end
-    if (modePrev ~= flightMode and modePrev ~= "") then
-      playTone(1000, 50, 0, PLAY_NOW)
-    end
-    modePrev = flightMode
 
     -- *** Directional indicator ***
     if (mode > 0) then
@@ -227,15 +224,15 @@ local function run(event)
     end
 
     -- *** Head free warning ***
-    if (headFree) then
+    if (armed and headFree) then
       lcd.drawText(48, 9, "HEADFREE", SMLSIZE + INVERS + BLINK)
     end
 
     -- *** Display flight mode (centered) ***
-    lcd.drawText(47, 34, flightMode, SMLSIZE + extra)
+    lcd.drawText(47, 34, modes[modeId][1], SMLSIZE + modes[modeId][2])
     pos = 47 + (87 - lcd.getLastPos()) / 2
     lcd.drawFilledRectangle(46, 33, 40, 10, ERASE)
-    lcd.drawText(pos, 33, flightMode, SMLSIZE + extra)
+    lcd.drawText(pos, 33, modes[modeId][1], SMLSIZE + modes[modeId][2])
 
     -- *** Data ***
     if (armed) then
@@ -252,7 +249,7 @@ local function run(event)
       lcd.drawFilledRectangle(0, 8, 20, 32, INVERS)
       tags = SMLSIZE + INVERS
     end
-    if (altHold and showHold) then
+    if (altHold and modes[modeId][3]) then
       lcd.drawText(0, 9, "Altd ", SMLSIZE + INVERS)
     else
       lcd.drawText(0, 9, "Altd", tags)
@@ -261,7 +258,7 @@ local function run(event)
     lcd.drawText(0, 25, "Sped", tags)
     lcd.drawText(0, 33, "Curr", tags)
     altitudeTags = SMLSIZE
-    if (altHold and showHold) then
+    if (altHold and modes[modeId][3]) then
       altitudeTags = SMLSIZE + INVERS
     end
     lcd.drawText(22, 9, math.floor(altitude), altitudeTags)
@@ -309,6 +306,54 @@ local function run(event)
     --lcd.drawRectangle(124, 9, 4, 55, SOLID)
     --height = math.max(math.min(math.ceil(getValue("Alt") / 400 * 53), 53), 1)
     --lcd.drawRectangle(125, 63 - height, 2, height, SOLID)
+
+    -- *** Audio feedback on flight modes ***
+    if (modeIdPrev and modeIdPrev ~= modeId) then
+      if (armed and modeID ~=5 and modeIdPrev == 6) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
+      elseif (armed == false and modeId == 6 and modeIdPrev ~= 5 and modeIdPrev ~= 1) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
+      elseif (armed == false and modeId == 6 and modeIdPrev == 5) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/gps.wav")
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/good.wav")
+      end
+      if (armed) then
+        if (modes[modeId][4]) then
+          playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId][4])
+        end
+        if (modes[modeId][2]) then
+          playHaptic(100, 1000, PLAY_NOW)
+        end
+      end
+    elseif (armed) then
+      if (altHold and modes[modeId][3] and altHoldPrev ~= altHold) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
+      elseif (altHold == false and modes[modeId][3] and altHoldPrev ~= altHold) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+      end
+      if (headingHold and headingHoldPrev ~= headingHold) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
+      elseif (headingHold == false and headingHoldPrev ~= headingHold) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+      end
+      if (altitude > 400 and getTime() > altitudeNextPlay) then
+        playNumber(altitude, 10)
+        --playFile("/SCRIPTS/TELEMETRY/SOUNDS/toohgh.wav")
+        altitudeNextPlay = getTime() + 1000
+      end
+      if (headFree or modes[modeId][2] > 0) then
+        playTone(2000, 100, 3000, PLAY_NOW)
+      end
+    end
+    --playNumber(value, unit [, attributes]) --PREC1 PREC2
+    --playDuration(duration [, hourFormat])
+    modeIdPrev = modeId
+    headingHoldPrev = headingHold
+    altHoldPrev = altHold
   
   end
 
