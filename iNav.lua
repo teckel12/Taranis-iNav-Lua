@@ -4,16 +4,8 @@
 -- Telemetry distance sensor name must be changed from '0420' to 'Dist'
 -- Sensors must be changed to US measurements (all values displayed in US measurements)
 -- Use at your own risk!
-
---0 or not specified normal font
---XXLSIZE jumbo sized font
---DBLSIZE double size font
---MIDSIZE mid sized font
---SMLSIZE small font
---INVERS inverted display
---BLINK blinking text
---LCD_W = 128 Q X7 / 212 X9D
---LCD_H = 64
+-- QX7 LCD_W = 128 / LCD_H = 64
+-- X9D LCD_W = 212 / LCD_H = 64
 
 local modeIdPrev = false
 local armedPrev = false
@@ -22,23 +14,23 @@ local altHoldPrev = false
 local headingRef = 0
 local noTelemWarn = false
 local altitudeNextPlay = 0
+local telemFlags = -1
 
 local modes = {
-  { "NO TELEM", BLINK + INVERS, false, false },
-  { "HORIZON", 0, true, "hrznmd.wav" },
-  { "ANGLE", 0, true, "anglmd.wav" },
-  { "ACRO", 0, true, "acromd.wav" },
-  { " NOT OK ", BLINK + INVERS, false, false },
-  { "READY", 0, false, false },
-  { "POS HOLD", 0, true, "poshld.wav" },
-  { "3D HOLD", 0, true, "3dhold.wav" },
-  { "WAYPOINT", 0, false, "waypt.wav" },
-  { "   RTH   ", BLINK + INVERS, false, "rtl.wav" },
-  { "FAILSAFE", BLINK + INVERS, false, "fson.wav" },
+  { t="NO TELEM",  f=BLINK + INVERS, a=false, w=false },
+  { t="HORIZON",   f=0,              a=true,  w="hrznmd.wav" },
+  { t="ANGLE",     f=0,              a=true,  w="anglmd.wav" },
+  { t="ACRO",      f=0,              a=true,  w="acromd.wav" },
+  { t=" NOT OK ",  f=BLINK + INVERS, a=false, w=false },
+  { t="READY",     f=0,              a=false, w=false },
+  { t="POS HOLD",  f=0,              a=true,  w="poshld.wav" },
+  { t="3D HOLD",   f=0,              a=true,  w="3dhold.wav" },
+  { t="WAYPOINT",  f=0,              a=false, w="waypt.wav" },
+  { t="   RTH   ", f=BLINK + INVERS, a=false, w="rtl.wav" },
+  { t="FAILSAFE",  f=BLINK + INVERS, a=false, w="fson.wav" },
 }
 
 local function init()
-  -- init is called once when model is loaded
   modelName = model.getInfo()["name"]
 
   if (getValue("Tmp1") <= 0) then
@@ -47,7 +39,32 @@ local function init()
 end
 
 local function background()
-  -- background is called periodically when screen is not visible
+  mode = getValue("Tmp1")
+  if (mode > 0 or telemFlags < 0) then
+    rxBatt = getValue("RxBt")
+    satellites = getValue("Tmp2")
+    gpsAlt = getValue("GAlt")
+    gpsLatLon = getValue("GPS")
+    heading = getValue("Hdg")
+    altitude = getValue("Alt")
+    distance = getValue("Dist")
+    speed = getValue("GSpd")
+    current = getValue("Curr")
+    altitudeMax = getValue("Alt+")
+    distanceMax = getValue("Dist+")
+    speedMax = getValue("GSpd+")
+    currentMax = getValue("Curr+")
+    batt = getValue("VFAS")
+    battMin = getValue("VFAS-")
+    cell = getValue("A4")
+    cellMin = getValue("A4-")
+    fuel = getValue("Fuel")
+    rssi = getValue("RSSI")
+    rssiMin = getValue("RSSI-")
+    telemFlags = 0
+  else
+    telemFlags = INVERS + BLINK
+  end
 end
 
 local function displayLat(coord)
@@ -68,20 +85,19 @@ end
 
 local function run(event)
   lcd.clear()
+  background()
 
   -- *** Title ***
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, modelName, INVERS)
   lcd.drawNumber(84, 0, getValue("tx-voltage") * 10, PREC1 + INVERS)
   lcd.drawText(lcd.getLastPos(), 0, "V", INVERS)
-  rxBatt = getValue("RxBt")
-  if (rxBatt) then
+  if (rxBatt > 0) then
     lcd.drawNumber(111, 0, rxBatt * 10, PREC1 + INVERS)
     lcd.drawText(lcd.getLastPos(), 0, "V", INVERS)
   end
 
   -- *** Initial warning if there's no telemetry ***
-  mode = getValue("Tmp1")
   if (noTelemWarn and mode <= 0) then
     result = popupWarning("No Telemetry!", event)
     if (result == "CANCEL") then
@@ -91,15 +107,20 @@ local function run(event)
     noTelemWarn = false
 
     -- *** Satellites ***
-    sats = tonumber(string.sub(getValue("Tmp2"), -2))
-    lcd.drawText(93, 9, "Sats " .. string.format("%2d", sats), SMLSIZE)
+    sats = tonumber(string.sub(satellites, -2))
+    lcd.drawText(93, 9, "Sats " .. string.format("%2d", sats), SMLSIZE + telemFlags)
 
     -- *** GPS Coords ***
-    gpsLatLon = getValue("GPS")
     if (type(gpsLatLon) == "table") then
-      lcd.drawText(96, 17, string.format("%5d", getValue("GAlt")) .. "ft", SMLSIZE)
+      lcd.drawText(96, 17, string.format("%5d", gpsAlt) .. "ft", SMLSIZE + telemFlags)
       lcd.drawText(82, 25, displayLat(gpsLatLon["lat"]), SMLSIZE)
+      pos = 82 + (129 - lcd.getLastPos())
+      lcd.drawText(82, 33, "      ", SMLSIZE)
+      lcd.drawText(pos, 25, displayLat(gpsLatLon["lat"]), SMLSIZE + telemFlags)
       lcd.drawText(82, 33, displayLon(gpsLatLon["lon"]), SMLSIZE)
+      pos = 82 + (129 - lcd.getLastPos())
+      lcd.drawText(82, 33, "      ", SMLSIZE)
+      lcd.drawText(pos, 33, displayLon(gpsLatLon["lon"]), SMLSIZE + telemFlags)
     else
       lcd.drawFilledRectangle(88, 17, 40, 23, INVERS)
       lcd.drawText(92, 20, "No GPS", INVERS)
@@ -187,22 +208,19 @@ local function run(event)
     if (mode > 0) then
       if (armed) then
         if (armedPrev == false) then
-          headingRef = getValue("Hdg")
+          headingRef = heading
         end
-        heading = getValue("Hdg") - headingRef
+        heading = heading - headingRef
         size = 10
         width = 145
         center = 19
       else
-        heading = getValue("Hdg")
         lcd.drawText(65, 8, "N", SMLSIZE)
-        --lcd.drawText(65, 26, "S", SMLSIZE)
-        lcd.drawFilledRectangle(66, 29, 3, 3, SOLID)
-        lcd.drawText(77, 17, "E", SMLSIZE)
-        lcd.drawText(53, 17, "W", SMLSIZE)
+        lcd.drawText(77, 20, "E", SMLSIZE)
+        lcd.drawText(53, 20, "W", SMLSIZE)
         size = 6
         width = 135
-        center = 21
+        center = 22
       end
       armedPrev = armed
       local rad1 = math.rad(heading)
@@ -229,82 +247,79 @@ local function run(event)
     end
 
     -- *** Display flight mode (centered) ***
-    lcd.drawText(47, 34, modes[modeId][1], SMLSIZE + modes[modeId][2])
-    pos = 47 + (87 - lcd.getLastPos()) / 2
+    lcd.drawText(48, 34, modes[modeId].t, SMLSIZE + modes[modeId].f)
+    pos = 48 + (87 - lcd.getLastPos()) / 2
     lcd.drawFilledRectangle(46, 33, 40, 10, ERASE)
-    lcd.drawText(pos, 33, modes[modeId][1], SMLSIZE + modes[modeId][2])
+    lcd.drawText(pos, 33, modes[modeId].t, SMLSIZE + modes[modeId].f)
 
     -- *** Data ***
     if (armed) then
-      altitude = getValue("Alt")
-      distance = getValue("Dist")
-      speed = getValue("GSpd")
-      current = getValue("Curr")
+      altd = altitude
+      dist = distance
+      sped = speed
+      curr = current
       tags = SMLSIZE
     else
-      altitude = getValue("Alt+")
-      distance = getValue("Dist+")
-      speed = getValue("GSpd+")
-      current = getValue("Curr+")
+      altd = altitudeMax
+      dist = distanceMax
+      sped = speedMax
+      curr = currentMax
       lcd.drawFilledRectangle(0, 8, 20, 32, INVERS)
       tags = SMLSIZE + INVERS
     end
-    if (altHold and modes[modeId][3]) then
+    if (altHold and modes[modeId].a) then
       lcd.drawText(0, 9, "Altd ", SMLSIZE + INVERS)
+      altitudeFlags = SMLSIZE + INVERS
     else
       lcd.drawText(0, 9, "Altd", tags)
+      altitudeFlags = SMLSIZE
     end
     lcd.drawText(0, 17, "Dist", tags)
     lcd.drawText(0, 25, "Sped", tags)
     lcd.drawText(0, 33, "Curr", tags)
-    altitudeTags = SMLSIZE
-    if (altHold and modes[modeId][3]) then
-      altitudeTags = SMLSIZE + INVERS
+    lcd.drawText(22, 9, math.floor(altd), altitudeFlags + telemFlags)
+    if (altd < 1000) then
+      lcd.drawText(lcd.getLastPos(), 9, "ft", altitudeFlags + telemFlags)
     end
-    lcd.drawText(22, 9, math.floor(altitude), altitudeTags)
-    if (altitude < 1000) then
-      lcd.drawText(lcd.getLastPos(), 9, "ft", altitudeTags)
+    lcd.drawText(22, 17, math.floor(dist * 3.28084), SMLSIZE + telemFlags)
+    if (dist < 1000) then
+      lcd.drawText(lcd.getLastPos(), 17, "ft", SMLSIZE + telemFlags)
     end
-    lcd.drawText(22, 17, math.floor(distance * 3.28084), SMLSIZE)
-    if (distance < 1000) then
-      lcd.drawText(lcd.getLastPos(), 17, "ft", SMLSIZE)
+    lcd.drawText(22, 25, math.floor(sped), SMLSIZE + telemFlags)
+    if (sped < 100) then
+      lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE + telemFlags)
     end
-    lcd.drawText(22, 25, math.floor(speed), SMLSIZE)
-    if (speed < 100) then
-      lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE)
-    end
-    lcd.drawNumber(22, 33, current * 10, SMLSIZE + PREC1)
-    if (current < 100) then
-      lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE)
+    lcd.drawNumber(22, 33, curr * 10, SMLSIZE + PREC1 + telemFlags)
+    if (curr < 100) then
+      lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE + telemFlags)
     end
 
     -- *** Bar graphs ***
-    batt = getValue("VFAS")
-    cell = getValue("A4")
     if (cell == 0 or cell == 3) then
       cells = math.floor(batt / 4.3) + 1
       cell = batt / cells
+      cellMin = battMin / cells
     end
     lcd.drawText(0, 42, "Batt", SMLSIZE)
-    lcd.drawNumber(22, 42, batt * 10, SMLSIZE + PREC1)
-    lcd.drawText(lcd.getLastPos(), 42, "V", SMLSIZE)
+    lcd.drawNumber(22, 42, batt * 10, SMLSIZE + PREC1 + telemFlags)
+    lcd.drawText(lcd.getLastPos(), 42, "V", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 41, 82, 7, math.min(math.max(cell - 3.3, 0) * 111.1, 98), 100)
+    min = 79 * (math.min(math.max(cellMin - 3.3, 0) * 111.1, 98) / 100) + 47
+    lcd.drawLine(min, 42, min, 46, SOLID, ERASE)
 
-    fuel = getValue("Fuel")
     lcd.drawText(0, 50, "Fuel", SMLSIZE)
-    lcd.drawText(22, 50, fuel .. "%", SMLSIZE)
+    lcd.drawText(22, 50, fuel .. "%", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 49, 82, 7, math.min(fuel, 98), 100)
 
-    rssi = getValue("RSSI")
     lcd.drawText(0, 58, "RSSI", SMLSIZE)
-    lcd.drawText(22, 58, rssi .. "dB", SMLSIZE)
+    lcd.drawText(22, 58, rssi .. "dB", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 57, 82, 7, math.min(rssi, 98), 100)
-    min = 79 * (math.min(getValue("RSSI-"), 98) / 98) + 47
+    min = 79 * (math.min(rssiMin, 98) / 98) + 47
     lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
 
     -- *** Altitude bar graph (maybe use for larger screens?) ***
     --lcd.drawRectangle(124, 9, 4, 55, SOLID)
-    --height = math.max(math.min(math.ceil(getValue("Alt") / 400 * 53), 53), 1)
+    --height = math.max(math.min(math.ceil(altitude / 400 * 53), 53), 1)
     --lcd.drawRectangle(125, 63 - height, 2, height, SOLID)
 
     -- *** Audio feedback on flight modes ***
@@ -318,24 +333,23 @@ local function run(event)
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/good.wav")
       end
       if (armed) then
-        if (modes[modeId][4]) then
-          playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId][4])
+        if (modes[modeId].w) then
+          playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId].w)
         end
-        if (modes[modeId][2]) then
+        if (modes[modeId].f) then
           playHaptic(100, 1000, PLAY_NOW)
         end
       end
     elseif (armed) then
-      if (altHold and modes[modeId][3] and altHoldPrev ~= altHold) then
+      if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
-      elseif (altHold == false and modes[modeId][3] and altHoldPrev ~= altHold) then
+      elseif (altHold == false and modes[modeId].a and altHoldPrev ~= altHold) then
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
       end
       if (headingHold and headingHoldPrev ~= headingHold) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhlda.wav")
       elseif (headingHold == false and headingHoldPrev ~= headingHold) then
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
@@ -345,7 +359,7 @@ local function run(event)
         --playFile("/SCRIPTS/TELEMETRY/SOUNDS/toohgh.wav")
         altitudeNextPlay = getTime() + 1000
       end
-      if (headFree or modes[modeId][2] > 0) then
+      if (headFree or modes[modeId].f > 0) then
         playTone(2000, 100, 3000, PLAY_NOW)
       end
     end
