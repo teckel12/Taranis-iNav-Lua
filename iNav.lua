@@ -26,7 +26,7 @@ local modes = {
   { t="POS HOLD",  f=0,              a=true,  w="poshld.wav" },
   { t="3D HOLD",   f=0,              a=true,  w="3dhold.wav" },
   { t="WAYPOINT",  f=0,              a=false, w="waypt.wav" },
-  { t="   RTH   ", f=BLINK + INVERS, a=false, w="rtl.wav" },
+  { t="   RTL   ", f=BLINK + INVERS, a=false, w="rtl.wav" },
   { t="FAILSAFE",  f=BLINK + INVERS, a=false, w="fson.wav" },
 }
 
@@ -67,22 +67,6 @@ local function background()
   end
 end
 
-local function displayLat(coord)
-  local ext = "N"
-  if (coord > 1) then
-    ext = "S"
-  end
-  return string.format("%10.4f", math.abs(coord)) .. ext
-end
-
-local function displayLon(coord)
-  local ext = "W"
-  if (coord > 1) then
-    ext = "E"
-  end
-  return string.format("%10.4f", math.abs(coord)) .. ext
-end
-
 local function run(event)
   lcd.clear()
   background()
@@ -90,11 +74,15 @@ local function run(event)
   -- *** Title ***
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, modelName, INVERS)
-  lcd.drawNumber(84, 0, getValue("tx-voltage") * 10, PREC1 + INVERS)
-  lcd.drawText(lcd.getLastPos(), 0, "V", INVERS)
-  if (rxBatt > 0) then
-    lcd.drawNumber(111, 0, rxBatt * 10, PREC1 + INVERS)
-    lcd.drawText(lcd.getLastPos(), 0, "V", INVERS)
+  timer1 = model.getTimer(0)
+  if (timer1["value"] > 0) then
+    lcd.drawTimer(60, 1, timer1["value"], SMLSIZE + TIMEHOUR + INVERS)
+  end
+  lcd.drawNumber(88, 1, getValue("tx-voltage") * 10, SMLSIZE + PREC1 + INVERS)
+  lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
+  if (rxBatt > 0 and mode > 0) then
+    lcd.drawNumber(111, 1, rxBatt * 10, SMLSIZE + PREC1 + INVERS)
+    lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
   end
 
   -- *** Initial warning if there's no telemetry ***
@@ -106,26 +94,34 @@ local function run(event)
   else
     noTelemWarn = false
 
-    -- *** Satellites ***
-    sats = tonumber(string.sub(satellites, -2))
-    lcd.drawText(93, 9, "Sats " .. string.format("%2d", sats), SMLSIZE + telemFlags)
-
     -- *** GPS Coords ***
     if (type(gpsLatLon) == "table") then
-      lcd.drawText(96, 17, string.format("%5d", gpsAlt) .. "ft", SMLSIZE + telemFlags)
-      lcd.drawText(82, 25, displayLat(gpsLatLon["lat"]), SMLSIZE)
-      pos = 82 + (129 - lcd.getLastPos())
-      lcd.drawText(82, 33, "      ", SMLSIZE)
-      lcd.drawText(pos, 25, displayLat(gpsLatLon["lat"]), SMLSIZE + telemFlags)
-      lcd.drawText(82, 33, displayLon(gpsLatLon["lon"]), SMLSIZE)
-      pos = 82 + (129 - lcd.getLastPos())
-      lcd.drawText(82, 33, "      ", SMLSIZE)
-      lcd.drawText(pos, 33, displayLon(gpsLatLon["lon"]), SMLSIZE + telemFlags)
+      value = math.floor(gpsAlt + 0.5) .. "ft"
+      lcd.drawText(85, 9, value, SMLSIZE)
+      pos = 85 + (129 - lcd.getLastPos())
+      lcd.drawText(pos, 17, value, SMLSIZE + telemFlags)
+
+      value = string.format("%.4f", gpsLatLon["lat"])
+      lcd.drawText(85, 9, value, SMLSIZE)
+      pos = 85 + (129 - lcd.getLastPos())
+      lcd.drawText(pos, 25, value, SMLSIZE + telemFlags)
+
+      value = string.format("%.4f", gpsLatLon["lon"])
+      lcd.drawText(85, 9, value, SMLSIZE)
+      pos = 85 + (129 - lcd.getLastPos())
+      lcd.drawText(pos, 33, value, SMLSIZE + telemFlags)
     else
       lcd.drawFilledRectangle(88, 17, 40, 23, INVERS)
       lcd.drawText(92, 20, "No GPS", INVERS)
       lcd.drawText(101, 30, "Fix", INVERS)
     end
+
+    -- *** Satellites ***
+    value = "Sats " .. string.format("%2d", tonumber(string.sub(satellites, -2)))
+    lcd.drawText(85, 9, value, SMLSIZE)
+    pos = 85 + (129 - lcd.getLastPos())
+    lcd.drawText(85, 9, "         ", SMLSIZE)
+    lcd.drawText(pos, 9, value, SMLSIZE + telemFlags)
 
     -- *** Decode flight mode ***
     holdMode = ""
@@ -253,30 +249,30 @@ local function run(event)
     lcd.drawText(pos, 33, modes[modeId].t, SMLSIZE + modes[modeId].f)
 
     -- *** Data ***
+    if (altHold and modes[modeId].a) then
+      altitudeFlags = SMLSIZE + INVERS
+    else
+      altitudeFlags = SMLSIZE
+    end
     if (armed) then
       altd = altitude
       dist = distance
       sped = speed
       curr = current
-      tags = SMLSIZE
+      lcd.drawText(0,  9, "Altd ", altitudeFlags)
+      lcd.drawText(0, 17, "Dist", SMLSIZE)
+      lcd.drawText(0, 25, "Sped", SMLSIZE)
+      lcd.drawText(0, 33, "Curr", SMLSIZE)
     else
       altd = altitudeMax
       dist = distanceMax
       sped = speedMax
       curr = currentMax
-      lcd.drawFilledRectangle(0, 8, 20, 32, INVERS)
-      tags = SMLSIZE + INVERS
+      lcd.drawText(0,  9, "Alt>", altitudeFlags)
+      lcd.drawText(0, 17, "Dst>", SMLSIZE)
+      lcd.drawText(0, 25, "Spd>", SMLSIZE)
+      lcd.drawText(0, 33, "Cur>", SMLSIZE)
     end
-    if (altHold and modes[modeId].a) then
-      lcd.drawText(0, 9, "Altd ", SMLSIZE + INVERS)
-      altitudeFlags = SMLSIZE + INVERS
-    else
-      lcd.drawText(0, 9, "Altd", tags)
-      altitudeFlags = SMLSIZE
-    end
-    lcd.drawText(0, 17, "Dist", tags)
-    lcd.drawText(0, 25, "Sped", tags)
-    lcd.drawText(0, 33, "Curr", tags)
     lcd.drawText(22, 9, math.floor(altd), altitudeFlags + telemFlags)
     if (altd < 1000) then
       lcd.drawText(lcd.getLastPos(), 9, "ft", altitudeFlags + telemFlags)
@@ -300,19 +296,19 @@ local function run(event)
       cell = batt / cells
       cellMin = battMin / cells
     end
-    lcd.drawText(0, 42, "Batt", SMLSIZE)
-    lcd.drawNumber(22, 42, batt * 10, SMLSIZE + PREC1 + telemFlags)
-    lcd.drawText(lcd.getLastPos(), 42, "V", SMLSIZE + telemFlags)
+    lcd.drawText(0, 41, "Batt", SMLSIZE)
+    lcd.drawNumber(22, 41, batt * 10, SMLSIZE + PREC1 + telemFlags)
+    lcd.drawText(lcd.getLastPos(), 41, "V", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 41, 82, 7, math.min(math.max(cell - 3.3, 0) * 111.1, 98), 100)
     min = 79 * (math.min(math.max(cellMin - 3.3, 0) * 111.1, 98) / 100) + 47
     lcd.drawLine(min, 42, min, 46, SOLID, ERASE)
 
-    lcd.drawText(0, 50, "Fuel", SMLSIZE)
-    lcd.drawText(22, 50, fuel .. "%", SMLSIZE + telemFlags)
+    lcd.drawText(0, 49, "Fuel", SMLSIZE)
+    lcd.drawText(22, 49, fuel .. "%", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 49, 82, 7, math.min(fuel, 98), 100)
 
-    lcd.drawText(0, 58, "RSSI", SMLSIZE)
-    lcd.drawText(22, 58, rssi .. "dB", SMLSIZE + telemFlags)
+    lcd.drawText(0, 57, "RSSI", SMLSIZE)
+    lcd.drawText(22, 57, rssi .. "dB", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 57, 82, 7, math.min(rssi, 98), 100)
     min = 79 * (math.min(rssiMin, 98) / 98) + 47
     lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
@@ -336,8 +332,8 @@ local function run(event)
         if (modes[modeId].w) then
           playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId].w)
         end
-        if (modes[modeId].f) then
-          playHaptic(100, 1000, PLAY_NOW)
+        if (modes[modeId].f > 0) then
+          playHaptic(50, 3000, PLAY_NOW)
         end
       end
     elseif (armed) then
