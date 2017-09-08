@@ -7,6 +7,7 @@
 -- QX7 LCD_W = 128 / LCD_H = 64
 -- X9D LCD_W = 212 / LCD_H = 64
 
+local armed = false
 local modeIdPrev = false
 local armedPrev = false
 local headingHoldPrev = false
@@ -70,6 +71,8 @@ local function init()
   data.rssi_id = getTelemetryId("RSSI")
   data.rssiMin_id = getTelemetryId("RSSI-")
   data.txBatt_id = getTelemetryId("tx-voltage")
+  data.timerStart = 0
+  data.timer = 0
   noTelemWarn = true
 end
 
@@ -98,10 +101,15 @@ local function background()
     data.fuel = getValue(data.fuel_id)
     data.rssiMin = getValue(data.rssiMin_id)
     data.txBatt = getValue(data.txBatt_id)
+    data.rssiLast = data.rssi
     telemFlags = 0
   else
     data.telemetry = false
     telemFlags = INVERS + BLINK
+  end
+  if (armed) then
+    --data.timer = model.getTimer(0)["value"] -- This would show timer1 instead of custom timer
+    data.timer = (getTime() - data.timerStart) / 100
   end
 end
 
@@ -112,14 +120,11 @@ local function run(event)
   -- *** Title ***
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, data.modelName, INVERS)
-  timer1 = model.getTimer(0)
-  --if (timer1["value"] > 0) then
-    lcd.drawTimer(60, 1, timer1["value"], SMLSIZE + TIMEHOUR + INVERS)
-  --end
-  lcd.drawNumber(88, 1, data.txBatt * 10, SMLSIZE + PREC1 + INVERS)
+  lcd.drawTimer(60, 1, data.timer, SMLSIZE + TIMEHOUR + INVERS)
+  lcd.drawNumber(88, 1, data.txBatt * 10.05, SMLSIZE + PREC1 + INVERS)
   lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
   if (data.rxBatt > 0 and data.telemetry) then
-    lcd.drawNumber(111, 1, data.rxBatt * 10, SMLSIZE + PREC1 + INVERS)
+    lcd.drawNumber(111, 1, data.rxBatt * 10.05, SMLSIZE + PREC1 + INVERS)
     lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
   end
 
@@ -171,7 +176,7 @@ local function run(event)
     armed = false
     ok2arm = false
     posHold = false
-    if (data.mode > 0) then
+    if (data.telemetry) then
       local modeTmp = data.mode
       modeA = math.floor(modeTmp / 10000)
       modeTmp = modeTmp - (modeA * 10000)
@@ -251,14 +256,13 @@ local function run(event)
         center = 19
       else
         headingDisplay = data.heading
-        lcd.drawText(65, 8, "N", SMLSIZE)
-        lcd.drawText(77, 20, "E", SMLSIZE)
-        lcd.drawText(53, 20, "W", SMLSIZE)
+        lcd.drawText(65, 9, "N", SMLSIZE)
+        lcd.drawText(77, 21, "E", SMLSIZE)
+        lcd.drawText(53, 21, "W", SMLSIZE)
         size = 6
         width = 135
-        center = 22
+        center = 23
       end
-      armedPrev = armed
       local rad1 = math.rad(headingDisplay)
       local rad2 = math.rad(headingDisplay + width)
       local rad3 = math.rad(headingDisplay - width)
@@ -275,11 +279,39 @@ local function run(event)
       else
         lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
       end
+    elseif (type(data.gpsLaunch) == "table") then
+      --http://www.movable-type.co.uk/scripts/latlong.html
+      --var y = Math.sin(λ2-λ1) * Math.cos(φ2);
+      --var x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
+      --var brng = Math.atan2(y, x).toDegrees();
+      o1 = math.rad(data.gpsLaunch["lat"])
+      a1 = math.rad(data.gpsLaunch["lon"])
+      o2 = math.rad(data.gpsLatLon["lat"])
+      a2 = math.rad(data.gpsLatLon["lon"])
+      y = math.sin(a2 - a1) * math.cos(o2)
+      x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
+      bearing = math.deg(math.atan2(y, x)) - headingRef
+      size = 10
+      width = 145
+      center = 19
+      local rad1 = math.rad(bearing)
+      local rad2 = math.rad(bearing + width)
+      local rad3 = math.rad(bearing - width)
+      local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
+      local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
+      local x2 = math.floor(math.sin(rad2) * size + 0.5) + 67
+      local y2 = center - math.floor(math.cos(rad2) * size + 0.5)
+      local x3 = math.floor(math.sin(rad3) * size + 0.5) + 67
+      local y3 = center - math.floor(math.cos(rad3) * size + 0.5)
+      lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
+      lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
+      lcd.drawLine(x2, y2, x3, y3, SOLID, FORCE)
+      lcd.drawText(63, 9, math.floor(data.distance * 3.28084 + 0.5) .. "ft", SMLSIZE)
     end
 
     -- *** Head free warning ***
     if (armed and headFree) then
-      lcd.drawText(48, 9, "HEADFREE", SMLSIZE + INVERS + BLINK)
+      lcd.drawText(80, 9, "HF", SMLSIZE + INVERS + BLINK)
     end
 
     -- *** Display flight mode (centered) ***
@@ -308,36 +340,37 @@ local function run(event)
       dist = data.distanceMax
       sped = data.speedMax
       curr = data.currentMax
-      lcd.drawText(0,  9, "Alt\192", altitudeFlags)
+      lcd.drawText(0,  9, "Alt", altitudeFlags)
+      lcd.drawText(lcd.getLastPos() + 1, 9, "\192", altitudeFlags)
       lcd.drawText(0, 17, "Dst\192", SMLSIZE)
       lcd.drawText(0, 25, "Spd\192", SMLSIZE)
       lcd.drawText(0, 33, "Cur\192", SMLSIZE)
     end
-    lcd.drawText(22, 9, math.floor(altd), altitudeFlags + telemFlags)
+    lcd.drawText(22, 9, math.floor(altd + 0.5), altitudeFlags + telemFlags)
     if (altd < 1000) then
       lcd.drawText(lcd.getLastPos(), 9, "ft", altitudeFlags + telemFlags)
     end
-    lcd.drawText(22, 17, math.floor(dist * 3.28084), SMLSIZE + telemFlags)
+    lcd.drawText(22, 17, math.floor(dist * 3.28084 + 0.5), SMLSIZE + telemFlags)
     if (dist < 1000) then
       lcd.drawText(lcd.getLastPos(), 17, "ft", SMLSIZE + telemFlags)
     end
-    lcd.drawText(22, 25, math.floor(sped), SMLSIZE + telemFlags)
+    lcd.drawText(22, 25, math.floor(sped + 0.5), SMLSIZE + telemFlags)
     if (sped < 100) then
       lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE + telemFlags)
     end
-    lcd.drawNumber(22, 33, curr * 10, SMLSIZE + PREC1 + telemFlags)
+    lcd.drawNumber(22, 33, curr * 10.05, SMLSIZE + PREC1 + telemFlags)
     if (curr < 100) then
       lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE + telemFlags)
     end
 
     -- *** Bar graphs ***
-    if (data.cell == 0 or data.cell == 3) then
-      cells = math.floor(data.batt / 4.3) + 1
-      data.cell = data.batt / cells
-      cellMin = data.battMin / cells
+    if (data.cell_id == -1 or data.cell == 3) then
+      data.cells = math.floor(data.batt / 4.3) + 1
+      data.cell = data.batt / data.cells
+      data.cellMin = data.battMin / data.cells
     end
     lcd.drawText(0, 41, "Batt", SMLSIZE)
-    lcd.drawNumber(22, 41, data.batt * 10, SMLSIZE + PREC1 + telemFlags)
+    lcd.drawNumber(22, 41, data.batt * 10.05, SMLSIZE + PREC1 + telemFlags)
     lcd.drawText(lcd.getLastPos(), 41, "V", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 41, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
     min = 79 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 98) / 100) + 47
@@ -348,8 +381,8 @@ local function run(event)
     lcd.drawGauge(46, 49, 82, 7, math.min(data.fuel, 98), 100)
 
     lcd.drawText(0, 57, "RSSI", SMLSIZE)
-    lcd.drawText(22, 57, data.rssi .. "dB", SMLSIZE + telemFlags)
-    lcd.drawGauge(46, 57, 82, 7, math.min(data.rssi, 98), 100)
+    lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + telemFlags)
+    lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
     min = 79 * (math.min(data.rssiMin, 98) / 98) + 47
     lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
 
@@ -359,21 +392,27 @@ local function run(event)
     --lcd.drawRectangle(125, 63 - height, 2, height, SOLID)
 
     -- *** Audio feedback on flight modes ***
-    if (modeIdPrev and modeIdPrev ~= modeId) then
-      if (armed and modeID ~=5 and modeIdPrev == 6) then
+    vibrate = false
+    beep = false
+    if (armed ~= armedPrev) then
+      if (armed) then
+        data.timerStart = getTime()
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
-      elseif (armed == false and modeId == 6 and modeIdPrev ~= 5 and modeIdPrev ~= 1) then
+        data.gpsLaunch = data.gpsLatLon
+      else
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
-      elseif (armed == false and modeId == 6 and modeIdPrev == 5) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/gps.wav")
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/good.wav")
+      end
+    end
+    if (modeIdPrev and modeIdPrev ~= modeId) then
+      if (armed == false and modeId == 6 and modeIdPrev == 5) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/ready.wav")
       end
       if (armed) then
         if (modes[modeId].w) then
           playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId].w)
         end
         if (modes[modeId].f > 0) then
-          playHaptic(50, 3000, PLAY_NOW)
+          vibrate = true
         end
       end
     elseif (armed) then
@@ -390,20 +429,28 @@ local function run(event)
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
       end
-      if (data.altitude > 400 and getTime() > altitudeNextPlay) then
-        playNumber(data.altitude, 10)
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/feet.wav")
-        altitudeNextPlay = getTime() + 1000
+      if (data.altitude > 400) then
+        if (getTime() > altitudeNextPlay) then
+          playNumber(data.altitude, 10)
+          altitudeNextPlay = getTime() + 1000
+        else
+          beep = true
+        end
       end
       if (headFree or modes[modeId].f > 0) then
-        playTone(2000, 100, 3000, PLAY_NOW)
+        beep = true
       end
     end
-    --playNumber(value, unit [, attributes]) --PREC1 PREC2
-    --playDuration(duration [, hourFormat])
+    if (vibrate) then
+      playHaptic(50, 3000, PLAY_NOW)
+    end
+    if (beep) then
+      playTone(2000, 100, 3000, PLAY_NOW)
+    end    
     modeIdPrev = modeId
     headingHoldPrev = headingHold
     altHoldPrev = altHold
+    armedPrev = armed
   
   end
 
