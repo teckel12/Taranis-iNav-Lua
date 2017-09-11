@@ -5,7 +5,8 @@
 -- Sensors must be changed to US measurements (all values displayed in US measurements)
 -- Use at your own risk!
 -- QX7 LCD_W = 128 / LCD_H = 64
--- X9D LCD_W = 212 / LCD_H = 64
+-- X9D/X9D+/X9E LCD_W = 212 / LCD_H = 64
+-- X10/X12S LCD_W = 480 / LCD_H = 272
 
 local armed = false
 local modeIdPrev = false
@@ -245,6 +246,7 @@ local function run(event)
     end
 
     -- *** Directional indicator ***
+    center = false
     if (data.telemetry) then
       if (armed) then
         if (armedPrev == false) then
@@ -279,7 +281,8 @@ local function run(event)
       else
         lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
       end
-    elseif (type(data.gpsLaunch) == "table") then
+    end
+    if (type(data.gpsLaunch) == "table" and type(data.gpsLatLon) == "table") then
       --http://www.movable-type.co.uk/scripts/latlong.html
       --var y = Math.sin(λ2-λ1) * Math.cos(φ2);
       --var x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
@@ -291,22 +294,17 @@ local function run(event)
       y = math.sin(a2 - a1) * math.cos(o2)
       x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
       bearing = math.deg(math.atan2(y, x)) - headingRef
-      size = 10
-      width = 145
-      center = 19
+      size = math.max((data.distance / (data.distanceMax + 0.01)) * 10, 5)
+      if (center == false) then
+        center = 19
+      end
       local rad1 = math.rad(bearing)
-      local rad2 = math.rad(bearing + width)
-      local rad3 = math.rad(bearing - width)
       local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
       local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
-      local x2 = math.floor(math.sin(rad2) * size + 0.5) + 67
-      local y2 = center - math.floor(math.cos(rad2) * size + 0.5)
-      local x3 = math.floor(math.sin(rad3) * size + 0.5) + 67
-      local y3 = center - math.floor(math.cos(rad3) * size + 0.5)
-      lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
-      lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
-      lcd.drawLine(x2, y2, x3, y3, SOLID, FORCE)
-      lcd.drawText(63, 9, math.floor(data.distance * 3.28084 + 0.5) .. "ft", SMLSIZE)
+      lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, ERASE)
+      lcd.drawLine(67, center, x1, y1, DOTTED, FORCE)
+      lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, SOLID)
+      --lcd.drawText(63, 9, math.floor(data.distance * 3.28084 + 0.5) .. "ft", SMLSIZE)
     end
 
     -- *** Head free warning ***
