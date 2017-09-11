@@ -74,6 +74,7 @@ local function init()
   data.txBatt_id = getTelemetryId("tx-voltage")
   data.timerStart = 0
   data.timer = 0
+  data.distLastPositive = 0
   noTelemWarn = true
 end
 
@@ -88,7 +89,7 @@ local function background()
     data.gpsLatLon = getValue(data.gpsLatLon_id)
     data.heading = getValue(data.heading_id)
     data.altitude = getValue(data.altitude_id)
-    data.distance = getValue(data.distance_id)
+    data.distance = math.floor(getValue(data.distance_id) * 3.28084 + 0.5)
     data.speed = getValue(data.speed_id)
     data.current = getValue(data.current_id)
     data.altitudeMax = getValue(data.altitudeMax_id)
@@ -105,8 +106,8 @@ local function background()
     data.rssiLast = data.rssi
     telemFlags = 0
     if (data.distance > 0) then
-      data.distLastPos = data.distance
-    end 
+      data.distLastPositive = data.distance
+    end
   else
     data.telemetry = false
     telemFlags = INVERS + BLINK
@@ -259,7 +260,7 @@ local function run(event)
         headingDisplay = data.heading - headingRef
         size = 10
         width = 145
-      else
+      elseif (type(data.gpsLaunch) ~= "table" or data.distLastPositive <= 15) then
         headingDisplay = data.heading
         lcd.drawText(65, 9, "N", SMLSIZE)
         lcd.drawText(77, 21, "E", SMLSIZE)
@@ -285,7 +286,7 @@ local function run(event)
         lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
       end
     end
-    if (type(data.gpsLaunch) == "table" and type(data.gpsLatLon) == "table") then
+    if (type(data.gpsLaunch) == "table" and type(data.gpsLatLon) == "table" and data.distLastPositive > 15) then
       --http://www.movable-type.co.uk/scripts/latlong.html
       --var y = Math.sin(λ2-λ1) * Math.cos(φ2);
       --var x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
@@ -297,7 +298,6 @@ local function run(event)
       y = math.sin(a2 - a1) * math.cos(o2)
       x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
       bearing = math.deg(math.atan2(y, x)) - headingRef
-      --size = math.max((data.distance / (data.distanceMax + 0.01)) * 10, 5)
       size = 10
       local rad1 = math.rad(bearing)
       local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
@@ -321,7 +321,7 @@ local function run(event)
     -- *** Data ***
     if (armed or toggle) then
       altd = data.altitude
-      dist = data.distance
+      dist = data.distLastPositive
       sped = data.speed
       curr = data.current
       lcd.drawText(0,  9, "Altd ", SMLSIZE)
@@ -330,9 +330,9 @@ local function run(event)
       lcd.drawText(0, 33, "Curr", SMLSIZE)
     else
       altd = data.altitudeMax
+      dist = math.floor(data.distanceMax * 3.28084 + 0.5)
       sped = data.speedMax
       curr = data.currentMax
-      dist = data.distanceMax
       lcd.drawText(0,  9, "Alt", SMLSIZE)
       lcd.drawText(15, 9, "\192", SMLSIZE)
       lcd.drawText(0, 17, "Dst\192", SMLSIZE)
@@ -346,7 +346,7 @@ local function run(event)
     if (armed and altHold and modes[modeId].a) then
       lcd.drawText(lcd.getLastPos() + 1, 9, "\192", SMLSIZE + INVERS) -- Altitude hold notification
     end
-    lcd.drawText(22, 17, math.floor(dist * 3.28084 + 0.5), SMLSIZE + telemFlags)
+    lcd.drawText(22, 17, dist, SMLSIZE + telemFlags)
     if (dist < 1000) then
       lcd.drawText(lcd.getLastPos(), 17, "ft", SMLSIZE + telemFlags)
     end
@@ -365,30 +365,26 @@ local function run(event)
       data.cell = data.batt / data.cells
       data.cellMin = data.battMin / data.cells
     end
+    lcd.drawText(0, 41, "Fuel", SMLSIZE)
+    lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + telemFlags)
+    lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
     if (armed or toggle) then
-      lcd.drawText(0, 41, "Batt", SMLSIZE)
-      lcd.drawNumber(22, 41, data.batt * 10.05, SMLSIZE + PREC1 + telemFlags)
-      lcd.drawText(lcd.getLastPos(), 41, "V", SMLSIZE + telemFlags)
-
+      lcd.drawText(0, 49, "Batt", SMLSIZE)
+      lcd.drawNumber(22, 49, data.batt * 10.05, SMLSIZE + PREC1 + telemFlags)
+      lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + telemFlags)
       lcd.drawText(0, 57, "RSSI", SMLSIZE)
       lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + telemFlags)
     else
-      lcd.drawText(0, 41, "Bat\193", SMLSIZE)
-      lcd.drawNumber(22, 41, data.battMin * 10.05, SMLSIZE + PREC1 + telemFlags)
-      lcd.drawText(lcd.getLastPos(), 41, "V", SMLSIZE + telemFlags)
-
+      lcd.drawText(0, 49, "Bat\193", SMLSIZE)
+      lcd.drawNumber(22, 49, data.battMin * 10.05, SMLSIZE + PREC1 + telemFlags)
+      lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + telemFlags)
       lcd.drawText(0, 57, "RSI", SMLSIZE)
       lcd.drawText(15, 57, "\193", SMLSIZE)
       lcd.drawText(22, 57, data.rssiMin .. "dB", SMLSIZE + telemFlags)
     end
-    lcd.drawGauge(46, 41, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
+    lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
     min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
-    lcd.drawLine(min, 42, min, 46, SOLID, ERASE)
-
-    lcd.drawText(0, 49, "Fuel", SMLSIZE)
-    lcd.drawText(22, 49, data.fuel .. "%", SMLSIZE + telemFlags)
-    lcd.drawGauge(46, 49, 82, 7, math.min(data.fuel, 98), 100)
-
+    lcd.drawLine(min, 50, min, 54, SOLID, ERASE)
     lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
     min = 80 * (math.min(data.rssiMin, 99) / 100) + 47
     lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
@@ -404,13 +400,14 @@ local function run(event)
     if (armed ~= armedPrev) then
       if (armed) then
         data.timerStart = getTime()
+        data.distLastPositive = 0
         playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
         data.gpsLaunch = data.gpsLatLon
       else
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
-        if (distance == 0 and distLastPos > 5) then
-          distance = distLastPos
+        if (data.distLastPositive < 5) then
+          data.distLastPositive = 0
         end
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
       end
     end
     if (modeIdPrev and modeIdPrev ~= modeId) then
