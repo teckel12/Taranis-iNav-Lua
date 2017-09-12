@@ -17,6 +17,7 @@ local headingRef = 0
 local noTelemWarn = true
 local altitudeNextPlay = 0
 local telemFlags = -1
+local maxValues = false
 
 -- modes
 --  t = text
@@ -48,6 +49,145 @@ local function getTelemetryId(name)
     end
 end
 
+local function flightModes()
+  armed = false
+  headFree = false
+  headingHold = false
+  altHold = false
+  modeId = 1
+  ok2arm = false
+  posHold = false
+  if (data.telemetry) then
+    local modeTmp = data.mode
+    modeA = math.floor(modeTmp / 10000)
+    modeTmp = modeTmp - (modeA * 10000)
+    modeB = math.floor(modeTmp / 1000)
+    modeTmp = modeTmp - (modeB * 1000)
+    modeC = math.floor(modeTmp / 100)
+    modeTmp = modeTmp - (modeC * 100)
+    modeD = math.floor(modeTmp / 10)
+    modeE = modeTmp - (modeD * 10)
+    if (modeE >= 4) then
+      armed = true
+      modeE = modeE - 4
+      if (modeD >= 4) then
+        modeD = modeD - 4
+      end
+      if (modeD == 2) then
+        modeId = 2
+      elseif (modeD == 1) then
+        modeId = 3
+      else
+        modeId = 4
+      end
+    end
+    if (modeE >= 2 or modeE == 0) then
+      modeId = 5
+    else
+      ok2arm = true
+      if (armed == false) then
+        modeId = 6
+      end
+    end
+    if (modeB >= 4) then
+      modeB = modeB - 4
+      headFree = true
+    end
+    if (modeC >= 4) then
+      modeC = modeC - 4
+      if (armed == true) then
+        modeId = 7
+        posHold = true
+      end
+    end
+    if (modeC >= 2) then
+      modeC = modeC - 2
+      altHold = true
+      if (posHold) then
+        modeId = 8
+      end
+    end
+    if (modeC == 1) then
+      headingHold = true
+    end  
+    if (modeB >= 2) then
+      modeB = modeB - 2
+      modeId = 9
+    end
+    if (modeB == 1) then
+      modeId = 10
+    end
+    if (modeA >= 4) then
+      modeId = 11
+    end
+  end
+
+  -- *** Audio feedback on flight modes ***
+  vibrate = false
+  beep = false
+  if (armed ~= armedPrev) then
+    if (armed) then
+      data.timerStart = getTime()
+      data.distLastPositive = 0
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
+    else
+      if (data.distLastPositive < 5) then
+        data.distLastPositive = 0
+      end
+      data.gpsHome = false
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
+    end
+  end
+  if (modeIdPrev and modeIdPrev ~= modeId) then
+    if (armed == false and modeId == 6 and modeIdPrev == 5) then
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/ready.wav")
+    end
+    if (armed) then
+      if (modes[modeId].w) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId].w)
+      end
+      if (modes[modeId].f > 0) then
+        vibrate = true
+      end
+    end
+  elseif (armed) then
+    if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
+    elseif (altHold == false and modes[modeId].a and altHoldPrev ~= altHold) then
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+    end
+    if (headingHold and headingHoldPrev ~= headingHold) then
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhlda.wav")
+    elseif (headingHold == false and headingHoldPrev ~= headingHold) then
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
+      playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+    end
+    if (data.altitude > 400) then
+      if (getTime() > altitudeNextPlay) then
+        playNumber(data.altitude, 10)
+        altitudeNextPlay = getTime() + 1000
+      else
+        beep = true
+      end
+    end
+    if (headFree or modes[modeId].f > 0) then
+      beep = true
+    end
+  end
+  if (vibrate) then
+    playHaptic(50, 3000, PLAY_NOW)
+  end
+  if (beep) then
+    playTone(2000, 100, 3000, PLAY_NOW)
+  end    
+  modeIdPrev = modeId
+  headingHoldPrev = headingHold
+  altHoldPrev = altHold
+  armedPrev = armed
+end
+
 local function init()
   data.modelName = model.getInfo()["name"]
   data.mode_id = getTelemetryId("Tmp1")
@@ -72,9 +212,13 @@ local function init()
   data.rssi_id = getTelemetryId("RSSI")
   data.rssiMin_id = getTelemetryId("RSSI-")
   data.txBatt_id = getTelemetryId("tx-voltage")
+  data.ras_id = getTelemetryId("RAS")
   data.timerStart = 0
   data.timer = 0
   data.distLastPositive = 0
+  data.gpsHomeSet = false
+  data.gpsHome = false
+  maxValues = false
   noTelemWarn = true
 end
 
@@ -108,13 +252,36 @@ local function background()
     if (data.distance > 0) then
       data.distLastPositive = data.distance
     end
+    maxValues = true
   else
     data.telemetry = false
     telemFlags = INVERS + BLINK
   end
+
+  flightModes()
+
+  data.gpsGood = false
+  if (type(data.gpsLatLon) == "table") then
+    data.gpsGood = true
+
+    -- *** Detect simulator ***
+    if (data.gpsLatLon["lat"] < 1) then
+      data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
+      data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
+      if (data.gpsHomeSet and type(data.gpsHome) == "table") then
+        factor = math.cos(math.rad(data.gpsHome["lat"]))
+        y = math.abs(data.gpsHome["lat"] - data.gpsLatLon["lat"]) * 365228.2
+        x = math.abs(data.gpsHome["lon"] - data.gpsLatLon["lon"]) * 364610.4 * factor
+        data.distLastPositive = math.floor(math.sqrt(x ^ 2 + y ^ 2) + 0.5)
+      end
+    end
+
+  end
   if (armed) then
-    --data.timer = model.getTimer(0)["value"] -- This would show timer1 instead of custom timer
-    data.timer = (getTime() - data.timerStart) / 100
+    if (data.gpsHomeSet == false and data.gpsGood) then
+      data.gpsHome = data.gpsLatLon
+      data.gpsHomeSet = true
+    end
   end
 end
 
@@ -123,6 +290,10 @@ local function run(event)
   background()
 
   -- *** Title ***
+  if (armed) then
+    --data.timer = model.getTimer(0)["value"] -- Show timer1 instead of custom timer
+    data.timer = (getTime() - data.timerStart) / 100
+  end
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, data.modelName, INVERS)
   lcd.drawTimer(60, 1, data.timer, SMLSIZE + TIMEHOUR + INVERS)
@@ -144,7 +315,7 @@ local function run(event)
     local toggle = math.floor(getTime() / 300) % 2 == 0 and true or false
 
     -- *** GPS Coords ***
-    if (type(data.gpsLatLon) == "table") then
+    if (data.gpsGood) then
       value = math.floor(data.gpsAlt + 0.5) .. "ft"
       lcd.drawText(85, 9, value, SMLSIZE)
       pos = 85 + (129 - lcd.getLastPos())
@@ -172,84 +343,6 @@ local function run(event)
     lcd.drawText(85, 9, "         ", SMLSIZE)
     lcd.drawText(pos, 9, value, SMLSIZE + telemFlags)
 
-    -- *** Decode flight  ***
-    holdMode = ""
-    headFree = false
-    headingHold = false
-    altHold = false
-    modeId = 1
-    extra = 0
-    armed = false
-    ok2arm = false
-    posHold = false
-    if (data.telemetry) then
-      local modeTmp = data.mode
-      modeA = math.floor(modeTmp / 10000)
-      modeTmp = modeTmp - (modeA * 10000)
-      modeB = math.floor(modeTmp / 1000)
-      modeTmp = modeTmp - (modeB * 1000)
-      modeC = math.floor(modeTmp / 100)
-      modeTmp = modeTmp - (modeC * 100)
-      modeD = math.floor(modeTmp / 10)
-      modeE = modeTmp - (modeD * 10)
-      if (modeE >= 4) then
-        armed = true
-        modeE = modeE - 4
-        extra = 0
-        if (modeD >= 4) then
-          modeD = modeD - 4
-        end
-        if (modeD == 2) then
-          modeId = 2
-        elseif (modeD == 1) then
-          modeId = 3
-        else
-          modeId = 4
-        end
-      else
-        armed = false
-      end
-      if (modeE >= 2 or modeE == 0) then
-        modeId = 5
-      else
-        ok2arm = true
-        if (armed == false) then
-          modeId = 6
-        end
-      end
-      if (modeB >= 4) then
-        modeB = modeB - 4
-        headFree = true
-      end
-      if (modeC >= 4) then
-        modeC = modeC - 4
-        if (armed == true) then
-          modeId = 7
-          posHold = true
-        end
-      end
-      if (modeC >= 2) then
-        modeC = modeC - 2
-        altHold = true
-        if (posHold) then
-          modeId = 8
-        end
-      end
-      if (modeC == 1) then
-        headingHold = true
-      end  
-      if (modeB >= 2) then
-        modeB = modeB - 2
-        modeId = 9
-      end
-      if (modeB == 1) then
-        modeId = 10
-      end
-      if (modeA >= 4) then
-        modeId = 11
-      end
-    end
-
     -- *** Directional indicator ***
     center = 19
     if (data.telemetry) then
@@ -260,7 +353,7 @@ local function run(event)
         headingDisplay = data.heading - headingRef
         size = 10
         width = 145
-      elseif (type(data.gpsLaunch) ~= "table" or data.distLastPositive <= 15) then
+      elseif (data.gpsHomeSet == false or data.distLastPositive <= 15) then
         headingDisplay = data.heading
         lcd.drawText(65, 9, "N", SMLSIZE)
         lcd.drawText(77, 21, "E", SMLSIZE)
@@ -286,19 +379,20 @@ local function run(event)
         lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
       end
     end
-    if (type(data.gpsLaunch) == "table" and type(data.gpsLatLon) == "table" and data.distLastPositive > 15) then
+    if (data.gpsHomeSet and data.gpsGood and data.distLastPositive > 15) then
       --http://www.movable-type.co.uk/scripts/latlong.html
       --var y = Math.sin(λ2-λ1) * Math.cos(φ2);
       --var x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
       --var brng = Math.atan2(y, x).toDegrees();
-      o1 = math.rad(data.gpsLaunch["lat"])
-      a1 = math.rad(data.gpsLaunch["lon"])
+      o1 = math.rad(data.gpsHome["lat"])
+      a1 = math.rad(data.gpsHome["lon"])
       o2 = math.rad(data.gpsLatLon["lat"])
       a2 = math.rad(data.gpsLatLon["lon"])
       y = math.sin(a2 - a1) * math.cos(o2)
       x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
       bearing = math.deg(math.atan2(y, x)) - headingRef
       size = 10
+      --size = math.max(data.distLastPositive / (data.distanceMax * 3.28084 + 0.5) * 10, 5)
       local rad1 = math.rad(bearing)
       local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
       local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
@@ -319,7 +413,7 @@ local function run(event)
     lcd.drawText(pos, 33, modes[modeId].t, SMLSIZE + modes[modeId].f)
 
     -- *** Data ***
-    if (armed or toggle) then
+    if (armed or toggle or maxValues == false) then
       altd = data.altitude
       dist = data.distLastPositive
       sped = data.speed
@@ -368,7 +462,7 @@ local function run(event)
     lcd.drawText(0, 41, "Fuel", SMLSIZE)
     lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + telemFlags)
     lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
-    if (armed or toggle) then
+    if (armed or toggle or maxValues == false) then
       lcd.drawText(0, 49, "Batt", SMLSIZE)
       lcd.drawNumber(22, 49, data.batt * 10.05, SMLSIZE + PREC1 + telemFlags)
       lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + telemFlags)
@@ -394,71 +488,6 @@ local function run(event)
     --height = math.max(math.min(math.ceil(data.altitude / 400 * 53), 53), 1)
     --lcd.drawRectangle(125, 63 - height, 2, height, SOLID)
 
-    -- *** Audio feedback on flight modes ***
-    vibrate = false
-    beep = false
-    if (armed ~= armedPrev) then
-      if (armed) then
-        data.timerStart = getTime()
-        data.distLastPositive = 0
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
-        data.gpsLaunch = data.gpsLatLon
-      else
-        if (data.distLastPositive < 5) then
-          data.distLastPositive = 0
-        end
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
-      end
-    end
-    if (modeIdPrev and modeIdPrev ~= modeId) then
-      if (armed == false and modeId == 6 and modeIdPrev == 5) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/ready.wav")
-      end
-      if (armed) then
-        if (modes[modeId].w) then
-          playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId].w)
-        end
-        if (modes[modeId].f > 0) then
-          vibrate = true
-        end
-      end
-    elseif (armed) then
-      if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
-      elseif (altHold == false and modes[modeId].a and altHoldPrev ~= altHold) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
-      end
-      if (headingHold and headingHoldPrev ~= headingHold) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhlda.wav")
-      elseif (headingHold == false and headingHoldPrev ~= headingHold) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
-      end
-      if (data.altitude > 400) then
-        if (getTime() > altitudeNextPlay) then
-          playNumber(data.altitude, 10)
-          altitudeNextPlay = getTime() + 1000
-        else
-          beep = true
-        end
-      end
-      if (headFree or modes[modeId].f > 0) then
-        beep = true
-      end
-    end
-    if (vibrate) then
-      playHaptic(50, 3000, PLAY_NOW)
-    end
-    if (beep) then
-      playTone(2000, 100, 3000, PLAY_NOW)
-    end    
-    modeIdPrev = modeId
-    headingHoldPrev = headingHold
-    altHoldPrev = altHold
-    armedPrev = armed
-  
   end
 
   return 1
