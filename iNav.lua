@@ -16,8 +16,11 @@ local altHoldPrev = false
 local headingRef = 0
 local noTelemWarn = true
 local altitudeNextPlay = 0
+local batteryNextPlay = 0
 local telemFlags = -1
 local maxValues = false
+local batlow = false
+local batcrt = false
 
 -- modes
 --  t = text
@@ -129,12 +132,16 @@ local function flightModes()
     if (armed) then
       data.timerStart = getTime()
       data.distLastPositive = 0
+      headingRef = data.heading
+      data.gpsHome = false
+      maxValues = true
+      batlow = false
+      batcrt = false
       playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
     else
       if (data.distLastPositive < 5) then
         data.distLastPositive = 0
       end
-      data.gpsHome = false
       playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
     end
   end
@@ -150,7 +157,8 @@ local function flightModes()
         vibrate = true
       end
     end
-  elseif (armed) then
+  end
+  if (armed) then
     if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
       playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
       playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
@@ -170,6 +178,24 @@ local function flightModes()
         altitudeNextPlay = getTime() + 1000
       else
         beep = true
+      end
+    end
+    if (data.fuel < 20 or data.cell < 3.4) then
+      if (getTime() > batteryNextPlay) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batcrt.wav")
+        batteryNextPlay = getTime() + 500
+      else
+        vibrate = true
+        beep = true
+      end
+      batlow = true
+    else
+      batteryNextPlay = 0
+    end
+    if (data.fuel < 30 or data.cell < 3.55) then
+      if (batlow == false) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
+        batlow = true
       end
     end
     if (headFree or modes[modeId].f > 0) then
@@ -216,9 +242,10 @@ local function init()
   data.timerStart = 0
   data.timer = 0
   data.distLastPositive = 0
-  data.gpsHomeSet = false
   data.gpsHome = false
   maxValues = false
+  altitudeNextPlay = 0
+  batteryNextPlay = 0
   noTelemWarn = true
 end
 
@@ -252,7 +279,6 @@ local function background()
     if (data.distance > 0) then
       data.distLastPositive = data.distance
     end
-    maxValues = true
   else
     data.telemetry = false
     telemFlags = INVERS + BLINK
@@ -265,22 +291,19 @@ local function background()
     data.gpsGood = true
 
     -- *** Detect simulator ***
-    if (data.gpsLatLon["lat"] < 1) then
-      data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
-      data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
-      if (data.gpsHomeSet and type(data.gpsHome) == "table") then
-        factor = math.cos(math.rad(data.gpsHome["lat"]))
-        y = math.abs(data.gpsHome["lat"] - data.gpsLatLon["lat"]) * 365228.2
-        x = math.abs(data.gpsHome["lon"] - data.gpsLatLon["lon"]) * 364610.4 * factor
-        data.distLastPositive = math.floor(math.sqrt(x ^ 2 + y ^ 2) + 0.5)
-      end
-    end
+    --if (data.gpsLatLon["lat"] < 1) then
+    --  data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
+    --  data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
+    --  if (type(data.gpsHome) == "table") then
+    --    factor = math.cos(math.rad(data.gpsHome["lat"]))
+    --    y = math.abs(data.gpsHome["lat"] - data.gpsLatLon["lat"]) * 365228.2
+    --    x = math.abs(data.gpsHome["lon"] - data.gpsLatLon["lon"]) * 364610.4 * factor
+    --    data.distLastPositive = math.floor(math.sqrt(x ^ 2 + y ^ 2) + 0.5)
+    --  end
+    --end
 
-  end
-  if (armed) then
-    if (data.gpsHomeSet == false and data.gpsGood) then
+    if (armed and type(data.gpsHome) ~= "table") then
       data.gpsHome = data.gpsLatLon
-      data.gpsHomeSet = true
     end
   end
 end
@@ -347,13 +370,10 @@ local function run(event)
     center = 19
     if (data.telemetry) then
       if (armed) then
-        if (armedPrev == false) then
-          headingRef = data.heading
-        end
         headingDisplay = data.heading - headingRef
         size = 10
         width = 145
-      elseif (data.gpsHomeSet == false or data.distLastPositive <= 15) then
+      elseif (type(data.gpsHome) ~= "table" or data.distLastPositive <= 15) then
         headingDisplay = data.heading
         lcd.drawText(65, 9, "N", SMLSIZE)
         lcd.drawText(77, 21, "E", SMLSIZE)
@@ -379,7 +399,7 @@ local function run(event)
         lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
       end
     end
-    if (data.gpsHomeSet and data.gpsGood and data.distLastPositive > 15) then
+    if (type(data.gpsHome) == "table" and data.gpsGood and data.distLastPositive > 15) then
       --http://www.movable-type.co.uk/scripts/latlong.html
       --var y = Math.sin(λ2-λ1) * Math.cos(φ2);
       --var x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
@@ -459,13 +479,17 @@ local function run(event)
       data.cell = data.batt / data.cells
       data.cellMin = data.battMin / data.cells
     end
+    local battFlags = 0
+    if (telemFlags > 0 or batteryNextPlay > 0) then
+      battFlags = INVERS + BLINK
+    end
     lcd.drawText(0, 41, "Fuel", SMLSIZE)
-    lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + telemFlags)
+    lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)
     lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
     if (armed or toggle or maxValues == false) then
       lcd.drawText(0, 49, "Batt", SMLSIZE)
-      lcd.drawNumber(22, 49, data.batt * 10.05, SMLSIZE + PREC1 + telemFlags)
-      lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + telemFlags)
+      lcd.drawNumber(22, 49, data.batt * 10.05, SMLSIZE + PREC1 + battFlags)
+      lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + battFlags)
       lcd.drawText(0, 57, "RSSI", SMLSIZE)
       lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + telemFlags)
     else
@@ -475,6 +499,9 @@ local function run(event)
       lcd.drawText(0, 57, "RSI", SMLSIZE)
       lcd.drawText(15, 57, "\193", SMLSIZE)
       lcd.drawText(22, 57, data.rssiMin .. "dB", SMLSIZE + telemFlags)
+    end
+    if (data.fuel == 0) then
+      lcd.drawLine(47, 42, 47, 46, SOLID, ERASE)
     end
     lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
     min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
