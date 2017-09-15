@@ -180,9 +180,13 @@ local function flightModes()
         beep = true
       end
     end
-    if (data.fuel < 20 or data.cell < 3.4) then
+    if (data.fuel <= 20 or data.cell < 3.40) then
       if (getTime() > batteryNextPlay) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batcrt.wav")
+        if (data.fuel <= 20) then
+          playNumber(data.fuel, 13)
+        else
+          playFile("/SCRIPTS/TELEMETRY/SOUNDS/batcrt.wav")
+        end
         batteryNextPlay = getTime() + 500
       else
         vibrate = true
@@ -192,9 +196,13 @@ local function flightModes()
     else
       batteryNextPlay = 0
     end
-    if (data.fuel < 30 or data.cell < 3.55) then
+    if (data.fuel <= 30 or data.cell < 3.55) then
       if (batlow == false) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
+        if (data.fuel <= 30) then
+          playNumber(data.fuel, 13)
+        else
+          playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
+        end
         batlow = true
       end
     end
@@ -203,10 +211,10 @@ local function flightModes()
     end
   end
   if (vibrate) then
-    playHaptic(50, 3000, PLAY_NOW)
+    playHaptic(50, 3000)
   end
   if (beep) then
-    playTone(2000, 100, 3000, PLAY_NOW)
+    playTone(2000, 100, 3000)
   end    
   modeIdPrev = modeId
   headingHoldPrev = headingHold
@@ -215,6 +223,15 @@ local function flightModes()
 end
 
 local function init()
+  local rssi, low, crit = getRSSI()
+  local ver, radio, maj, minor, rev = getVersion()
+  local general = getGeneralSettings()
+  data.rssiLow = low
+  data.rssiCrit = crit
+  data.version = maj + minor / 10 -- Make sure OpenTX 2.2+
+  data.txBattMin = general["battMin"]
+  data.txBattMax = general["battMax"]
+  data.units = general["imperial"] -- 0 = metric / 1 = imperial
   data.modelName = model.getInfo()["name"]
   data.mode_id = getTelemetryId("Tmp1")
   data.rxBatt_id = getTelemetryId("RxBt")
@@ -320,8 +337,19 @@ local function run(event)
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, data.modelName, INVERS)
   lcd.drawTimer(60, 1, data.timer, SMLSIZE + TIMEHOUR + INVERS)
-  lcd.drawNumber(88, 1, data.txBatt * 10.05, SMLSIZE + PREC1 + INVERS)
-  lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
+
+  -- Shows Tx battery voltage as number
+  --lcd.drawNumber(88, 1, data.txBatt * 10.05, SMLSIZE + PREC1 + INVERS)
+  --lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
+
+  -- Show Tx battery voltage as graphic
+  lcd.drawFilledRectangle(86, 1, 19, 6, ERASE)
+  lcd.drawLine(105, 2, 105, 5, SOLID, ERASE)
+  local battGauge = math.max(math.min((data.txBatt - data.txBattMin) / (data.txBattMax - data.txBattMin) * 17, 17), 0) + 86
+  for i = 87, battGauge, 2 do
+    lcd.drawLine(i, 2, i, 5, SOLID, FORCE)
+  end
+
   if (data.rxBatt > 0 and data.telemetry) then
     lcd.drawNumber(111, 1, data.rxBatt * 10.05, SMLSIZE + PREC1 + INVERS)
     lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
