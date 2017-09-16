@@ -15,12 +15,14 @@ local headingHoldPrev = false
 local altHoldPrev = false
 local headingRef = 0
 local noTelemWarn = true
-local altitudeNextPlay = 0
-local batteryNextPlay = 0
+local altNextPlay = 0
+local battNextPlay = 0
+local battPercentPlayed = 100
 local telemFlags = -1
 local maxValues = false
 local batlow = false
 local batcrt = false
+local rssiLow = false
 
 -- modes
 --  t = text
@@ -128,6 +130,7 @@ local function flightModes()
   -- *** Audio feedback on flight modes ***
   vibrate = false
   beep = false
+  rssiLow = false
   if (armed ~= armedPrev) then
     if (armed) then
       data.timerStart = getTime()
@@ -173,48 +176,61 @@ local function flightModes()
       playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
     end
     if (data.altitude > 400) then
-      if (getTime() > altitudeNextPlay) then
+      if (getTime() > altNextPlay) then
         playNumber(data.altitude, 10)
-        altitudeNextPlay = getTime() + 1000
+        altNextPlay = getTime() + 1000
       else
         beep = true
       end
     end
+    -- Count down 50%, 40%, 30% battery
+    if (data.fuel % 10 == 0 and data.fuel <= 50 and data.fuel >= 30 and battPercentPlayed > data.fuel) then
+      if (data.fuel == 30) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
+      else
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/battry.wav")
+      end
+      playNumber(data.fuel, 13)
+      battPercentPlayed = data.fuel
+    end
     if (data.fuel <= 20 or data.cell < 3.40) then
-      if (getTime() > batteryNextPlay) then
-        if (data.fuel <= 20) then
+      if (getTime() > battNextPlay) then
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batcrt.wav")
+        if (data.fuel <= 20 and battPercentPlayed > data.fuel) then
           playNumber(data.fuel, 13)
-        else
-          playFile("/SCRIPTS/TELEMETRY/SOUNDS/batcrt.wav")
+          battPercentPlayed = data.fuel
         end
-        batteryNextPlay = getTime() + 500
+        battNextPlay = getTime() + 500
       else
         vibrate = true
         beep = true
       end
       batlow = true
     else
-      batteryNextPlay = 0
+      battNextPlay = 0
     end
-    if (data.fuel <= 30 or data.cell < 3.55) then
+    if (data.cell < 3.50) then
       if (batlow == false) then
-        if (data.fuel <= 30) then
-          playNumber(data.fuel, 13)
-        else
-          playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
-        end
+        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
         batlow = true
       end
     end
     if (headFree or modes[modeId].f > 0) then
       beep = true
     end
+    if (data.rssi < data.rssiLow) then
+      if (data.rssi < data.rssiCrit) then
+        vibrate = true
+      end
+      beep = true
+      rssiLow = true
+    end
   end
   if (vibrate) then
-    playHaptic(50, 3000)
+    playHaptic(25, 3000)
   end
   if (beep) then
-    playTone(2000, 100, 3000)
+    playTone(2000, 100, 3000, PLAY_NOW)
   end    
   modeIdPrev = modeId
   headingHoldPrev = headingHold
@@ -261,8 +277,9 @@ local function init()
   data.distLastPositive = 0
   data.gpsHome = false
   maxValues = false
-  altitudeNextPlay = 0
-  batteryNextPlay = 0
+  altNextPlay = 0
+  battNextPlay = 0
+  battPercentPlayed = 100
   noTelemWarn = true
 end
 
@@ -328,6 +345,11 @@ end
 local function run(event)
   lcd.clear()
   background()
+
+  if (data.version < 2.2) then
+    lcd.drawText(5, 27, "OpenTX v2.2.0+ Required")
+    return
+  end
 
   -- *** Title ***
   if (armed) then
@@ -508,18 +530,22 @@ local function run(event)
       data.cellMin = data.battMin / data.cells
     end
     local battFlags = 0
-    if (telemFlags > 0 or batteryNextPlay > 0) then
+    if (telemFlags > 0 or battNextPlay > 0) then
       battFlags = INVERS + BLINK
     end
     lcd.drawText(0, 41, "Fuel", SMLSIZE)
     lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)
     lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
     if (armed or toggle or maxValues == false) then
+      local rssiFlags = 0
+      if (telemFlags > 0 or rssiLow) then
+        rssiFlags = INVERS + BLINK
+      end
       lcd.drawText(0, 49, "Batt", SMLSIZE)
       lcd.drawNumber(22, 49, data.batt * 10.05, SMLSIZE + PREC1 + battFlags)
       lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + battFlags)
       lcd.drawText(0, 57, "RSSI", SMLSIZE)
-      lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + telemFlags)
+      lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + rssiFlags)
     else
       lcd.drawText(0, 49, "Bat\193", SMLSIZE)
       lcd.drawNumber(22, 49, data.battMin * 10.05, SMLSIZE + PREC1 + telemFlags)
@@ -534,8 +560,13 @@ local function run(event)
     lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
     min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
     lcd.drawLine(min, 50, min, 54, SOLID, ERASE)
-    lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
-    min = 80 * (math.min(data.rssiMin, 99) / 100) + 47
+    -- Show RSSI scale from 0-100
+    --lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
+    --min = 80 * (math.min(data.rssiMin, 99) / 100) + 47
+    -- Show RSSI scale from RSSI Critical-100
+    local rssiGauge = math.max(math.min((data.rssiLast - data.rssiCrit) / (100 - data.rssiCrit) * 100, 98), 0)
+    lcd.drawGauge(46, 57, 82, 7, rssiGauge, 100)
+    min = 80 * (math.max(math.min((data.rssiMin - data.rssiCrit) / (100 - data.rssiCrit) * 100, 99), 0) / 100) + 47
     lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
 
     -- *** Altitude bar graph (maybe use for larger screens?) ***
