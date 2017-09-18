@@ -41,7 +41,7 @@ local modes = {
   { t="POS HOLD",  f=0,              a=true,  w="poshld.wav" },
   { t="3D HOLD",   f=0,              a=true,  w="3dhold.wav" },
   { t="WAYPOINT",  f=0,              a=false, w="waypt.wav" },
-  { t="   RTL   ", f=BLINK + INVERS, a=false, w="rtl.wav" },
+  { t="   RTH   ", f=BLINK + INVERS, a=false, w="rtl.wav" },
   { t="FAILSAFE",  f=BLINK + INVERS, a=false, w="fson.wav" },
 }
 
@@ -173,15 +173,16 @@ local function flightModes()
         beep = true
       end
     end
-    -- Count down 50%, 40%, 30% battery
-    if (data.fuel % 10 == 0 and data.fuel <= 50 and data.fuel >= 30 and battPercentPlayed > data.fuel) then
-      if (data.fuel == 30) then
+    if (battPercentPlayed > data.fuel) then
+      if (data.fuel == 30 or data.fuel == 25) then
         playFile(wavPath .. "batlow.wav")
-      else
+        playNumber(data.fuel, 13)
+        battPercentPlayed = data.fuel
+      elseif (data.fuel % 10 == 0 and data.fuel < 100 and data.fuel >= 40) then
         playFile(wavPath .. "battry.wav")
+        playNumber(data.fuel, 13)
+        battPercentPlayed = data.fuel
       end
-      playNumber(data.fuel, 13)
-      battPercentPlayed = data.fuel
     end
     if (data.fuel <= 20 or data.cell < 3.40) then
       if (getTime() > battNextPlay) then
@@ -255,8 +256,6 @@ local function init()
   data.currentMax_id = getTelemetryId("Curr+")
   data.batt_id = getTelemetryId("VFAS")
   data.battMin_id = getTelemetryId("VFAS-")
-  data.cell_id = getTelemetryId("A4")
-  data.cellMin_id = getTelemetryId("A4-")
   data.fuel_id = getTelemetryId("Fuel")
   data.rssi_id = getTelemetryId("RSSI")
   data.rssiMin_id = getTelemetryId("RSSI-")
@@ -293,14 +292,9 @@ local function background()
     data.currentMax = getValue(data.currentMax_id)
     data.batt = getValue(data.batt_id)
     data.battMin = getValue(data.battMin_id)
-    if (data.cell_id == -1 or test) then
-      data.cells = math.floor(data.batt / 4.3) + 1
-      data.cell = data.batt / data.cells
-      data.cellMin = data.battMin / data.cells
-    else
-      data.cell = getValue(data.cell_id)
-      data.cellMin = getValue(data.cellMin_id)
-    end
+    data.cells = math.floor(data.batt / 4.3) + 1
+    data.cell = data.batt / data.cells
+    data.cellMin = data.battMin / data.cells
     data.fuel = getValue(data.fuel_id)
     data.rssiMin = getValue(data.rssiMin_id)
     data.txBatt = getValue(data.txBatt_id)
