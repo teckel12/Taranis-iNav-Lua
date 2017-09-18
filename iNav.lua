@@ -8,6 +8,7 @@
 -- X9D/X9D+/X9E LCD_W = 212 / LCD_H = 64
 -- X10/X12S LCD_W = 480 / LCD_H = 272
 
+--local test = true
 local armed = false
 local modeIdPrev = false
 local armedPrev = false
@@ -21,7 +22,6 @@ local battPercentPlayed = 100
 local telemFlags = -1
 local maxValues = false
 local batlow = false
-local batcrt = false
 local rssiLow = false
 
 -- modes
@@ -64,14 +64,14 @@ local function flightModes()
   posHold = false
   if (data.telemetry) then
     local modeTmp = data.mode
-    modeA = math.floor(modeTmp / 10000)
+    local modeA = math.floor(modeTmp / 10000)
     modeTmp = modeTmp - (modeA * 10000)
-    modeB = math.floor(modeTmp / 1000)
+    local modeB = math.floor(modeTmp / 1000)
     modeTmp = modeTmp - (modeB * 1000)
-    modeC = math.floor(modeTmp / 100)
+    local modeC = math.floor(modeTmp / 100)
     modeTmp = modeTmp - (modeC * 100)
-    modeD = math.floor(modeTmp / 10)
-    modeE = modeTmp - (modeD * 10)
+    local modeD = math.floor(modeTmp / 10)
+    local modeE = modeTmp - (modeD * 10)
     if (modeE >= 4) then
       armed = true
       modeE = modeE - 4
@@ -138,8 +138,8 @@ local function flightModes()
       headingRef = data.heading
       data.gpsHome = false
       maxValues = true
+      battPercentPlayed = 100
       batlow = false
-      batcrt = false
       playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
     else
       if (data.distLastPositive < 5) then
@@ -303,8 +303,14 @@ local function background()
     data.currentMax = getValue(data.currentMax_id)
     data.batt = getValue(data.batt_id)
     data.battMin = getValue(data.battMin_id)
-    data.cell = getValue(data.cell_id)
-    data.cellMin = getValue(data.cellMin_id)
+    if (data.cell_id == -1 or test) then
+      data.cells = math.floor(data.batt / 4.3) + 1
+      data.cell = data.batt / data.cells
+      data.cellMin = data.battMin / data.cells
+    else
+      data.cell = getValue(data.cell_id)
+      data.cellMin = getValue(data.cellMin_id)
+    end
     data.fuel = getValue(data.fuel_id)
     data.rssiMin = getValue(data.rssiMin_id)
     data.txBatt = getValue(data.txBatt_id)
@@ -324,8 +330,8 @@ local function background()
   if (type(data.gpsLatLon) == "table") then
     data.gpsGood = true
 
-    -- *** Detect simulator ***
-    --if (data.gpsLatLon["lat"] < 1) then
+    -- Fix GPS coords and distance
+    --if (test) then
     --  data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
     --  data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
     --  if (type(data.gpsHome) == "table") then
@@ -524,11 +530,6 @@ local function run(event)
     end
 
     -- *** Bar graphs ***
-    if (data.cell_id == -1 or data.cell == 3) then
-      data.cells = math.floor(data.batt / 4.3) + 1
-      data.cell = data.batt / data.cells
-      data.cellMin = data.battMin / data.cells
-    end
     local battFlags = 0
     if (telemFlags > 0 or battNextPlay > 0) then
       battFlags = INVERS + BLINK
@@ -560,10 +561,10 @@ local function run(event)
     lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
     min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
     lcd.drawLine(min, 50, min, 54, SOLID, ERASE)
-    -- Show RSSI scale from 0-100
+    -- Show RSSI scale from 0 to 100
     --lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
     --min = 80 * (math.min(data.rssiMin, 99) / 100) + 47
-    -- Show RSSI scale from RSSI Critical-100
+    -- Show RSSI scale from RSSI Critical to 100
     local rssiGauge = math.max(math.min((data.rssiLast - data.rssiCrit) / (100 - data.rssiCrit) * 100, 98), 0)
     lcd.drawGauge(46, 57, 82, 7, rssiGauge, 100)
     min = 80 * (math.max(math.min((data.rssiMin - data.rssiCrit) / (100 - data.rssiCrit) * 100, 99), 0) / 100) + 47
