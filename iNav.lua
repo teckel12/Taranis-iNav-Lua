@@ -8,6 +8,8 @@
 -- X9D/X9D+/X9E LCD_W = 212 / LCD_H = 64
 -- X10/X12S LCD_W = 480 / LCD_H = 272
 
+local wavPath = "/SCRIPTS/TELEMETRY/iNav/"
+
 --local test = true
 local armed = false
 local modeIdPrev = false
@@ -63,30 +65,22 @@ local function flightModes()
   ok2arm = false
   posHold = false
   if (data.telemetry) then
-    local modeTmp = data.mode
-    local modeA = math.floor(modeTmp / 10000)
-    modeTmp = modeTmp - (modeA * 10000)
-    local modeB = math.floor(modeTmp / 1000)
-    modeTmp = modeTmp - (modeB * 1000)
-    local modeC = math.floor(modeTmp / 100)
-    modeTmp = modeTmp - (modeC * 100)
-    local modeD = math.floor(modeTmp / 10)
-    local modeE = modeTmp - (modeD * 10)
-    if (modeE >= 4) then
+    local modeA = math.floor(data.mode / 10000)
+    local modeB = math.floor(data.mode / 1000 ) % 10
+    local modeC = math.floor(data.mode / 100) % 10
+    local modeD = math.floor(data.mode / 10) % 10
+    local modeE = data.mode % 10
+    if (bit32.band(modeE, 4) > 0) then
       armed = true
-      modeE = modeE - 4
-      if (modeD >= 4) then
-        modeD = modeD - 4
-      end
-      if (modeD == 2) then
+      if (bit32.band(modeD, 2) > 0) then
         modeId = 2
-      elseif (modeD == 1) then
+      elseif (bit32.band(modeD, 1) > 0) then
         modeId = 3
       else
         modeId = 4
       end
     end
-    if (modeE >= 2 or modeE == 0) then
+    if (bit32.band(modeE, 2) > 0 or modeE == 0) then
       modeId = 5
     else
       ok2arm = true
@@ -94,35 +88,31 @@ local function flightModes()
         modeId = 6
       end
     end
-    if (modeB >= 4) then
-      modeB = modeB - 4
+    if (bit32.band(modeB, 4) > 0) then
       headFree = true
     end
-    if (modeC >= 4) then
-      modeC = modeC - 4
+    if (bit32.band(modeC, 4) > 0) then
       if (armed == true) then
         modeId = 7
         posHold = true
       end
     end
-    if (modeC >= 2) then
-      modeC = modeC - 2
+    if (bit32.band(modeC, 2) > 0) then
       altHold = true
       if (posHold) then
         modeId = 8
       end
     end
-    if (modeC == 1) then
+    if (bit32.band(modeC, 1) > 0) then
       headingHold = true
     end  
-    if (modeB >= 2) then
-      modeB = modeB - 2
+    if (bit32.band(modeB, 2) > 0) then
       modeId = 9
     end
-    if (modeB == 1) then
+    if (bit32.band(modeB, 4) > 0) then
       modeId = 10
     end
-    if (modeA >= 4) then
+    if (bit32.band(modeA, 4) > 0) then
       modeId = 11
     end
   end
@@ -140,21 +130,21 @@ local function flightModes()
       maxValues = true
       battPercentPlayed = 100
       batlow = false
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
+      playFile(wavPath .. "engarm.wav")
     else
       if (data.distLastPositive < 5) then
         data.distLastPositive = 0
       end
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
+      playFile(wavPath .. "engdrm.wav")
     end
   end
   if (modeIdPrev and modeIdPrev ~= modeId) then
     if (armed == false and modeId == 6 and modeIdPrev == 5) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/ready.wav")
+      playFile(wavPath .. "ready.wav")
     end
     if (armed) then
       if (modes[modeId].w) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId].w)
+        playFile(wavPath .. modes[modeId].w)
       end
       if (modes[modeId].f > 0) then
         vibrate = true
@@ -163,17 +153,17 @@ local function flightModes()
   end
   if (armed) then
     if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
+      playFile(wavPath .. "althld.wav")
+      playFile(wavPath .. "active.wav")
     elseif (altHold == false and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+      playFile(wavPath .. "althld.wav")
+      playFile(wavPath .. "off.wav")
     end
     if (headingHold and headingHoldPrev ~= headingHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhlda.wav")
+      playFile(wavPath .. "hedhlda.wav")
     elseif (headingHold == false and headingHoldPrev ~= headingHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+      playFile(wavPath .. "hedhld.wav")
+      playFile(wavPath .. "off.wav")
     end
     if (data.altitude > 400) then
       if (getTime() > altNextPlay) then
@@ -186,16 +176,16 @@ local function flightModes()
     -- Count down 50%, 40%, 30% battery
     if (data.fuel % 10 == 0 and data.fuel <= 50 and data.fuel >= 30 and battPercentPlayed > data.fuel) then
       if (data.fuel == 30) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
+        playFile(wavPath .. "batlow.wav")
       else
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/battry.wav")
+        playFile(wavPath .. "battry.wav")
       end
       playNumber(data.fuel, 13)
       battPercentPlayed = data.fuel
     end
     if (data.fuel <= 20 or data.cell < 3.40) then
       if (getTime() > battNextPlay) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batcrt.wav")
+        playFile(wavPath .. "batcrt.wav")
         if (data.fuel <= 20 and battPercentPlayed > data.fuel) then
           playNumber(data.fuel, 13)
           battPercentPlayed = data.fuel
@@ -211,7 +201,7 @@ local function flightModes()
     end
     if (data.cell < 3.50) then
       if (batlow == false) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
+        playFile(wavPath .. "batlow.wav")
         batlow = true
       end
     end
