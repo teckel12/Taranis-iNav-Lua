@@ -8,6 +8,9 @@
 -- X9D/X9D+/X9E LCD_W = 212 / LCD_H = 64
 -- X10/X12S LCD_W = 480 / LCD_H = 272
 
+local wavPath = "/SCRIPTS/TELEMETRY/iNav/"
+
+--local test = true
 local armed = false
 local modeIdPrev = false
 local armedPrev = false
@@ -15,12 +18,13 @@ local headingHoldPrev = false
 local altHoldPrev = false
 local headingRef = 0
 local noTelemWarn = true
-local altitudeNextPlay = 0
-local batteryNextPlay = 0
+local altNextPlay = 0
+local battNextPlay = 0
+local battPercentPlayed = 100
 local telemFlags = -1
 local maxValues = false
 local batlow = false
-local batcrt = false
+local rssiLow = false
 
 -- modes
 --  t = text
@@ -61,30 +65,22 @@ local function flightModes()
   ok2arm = false
   posHold = false
   if (data.telemetry) then
-    local modeTmp = data.mode
-    modeA = math.floor(modeTmp / 10000)
-    modeTmp = modeTmp - (modeA * 10000)
-    modeB = math.floor(modeTmp / 1000)
-    modeTmp = modeTmp - (modeB * 1000)
-    modeC = math.floor(modeTmp / 100)
-    modeTmp = modeTmp - (modeC * 100)
-    modeD = math.floor(modeTmp / 10)
-    modeE = modeTmp - (modeD * 10)
-    if (modeE >= 4) then
+    local modeA = math.floor(data.mode / 10000)
+    local modeB = math.floor(data.mode / 1000 ) % 10
+    local modeC = math.floor(data.mode / 100) % 10
+    local modeD = math.floor(data.mode / 10) % 10
+    local modeE = data.mode % 10
+    if (bit32.band(modeE, 4) > 0) then
       armed = true
-      modeE = modeE - 4
-      if (modeD >= 4) then
-        modeD = modeD - 4
-      end
-      if (modeD == 2) then
+      if (bit32.band(modeD, 2) > 0) then
         modeId = 2
-      elseif (modeD == 1) then
+      elseif (bit32.band(modeD, 1) > 0) then
         modeId = 3
       else
         modeId = 4
       end
     end
-    if (modeE >= 2 or modeE == 0) then
+    if (bit32.band(modeE, 2) > 0 or modeE == 0) then
       modeId = 5
     else
       ok2arm = true
@@ -92,35 +88,31 @@ local function flightModes()
         modeId = 6
       end
     end
-    if (modeB >= 4) then
-      modeB = modeB - 4
+    if (bit32.band(modeB, 4) > 0) then
       headFree = true
     end
-    if (modeC >= 4) then
-      modeC = modeC - 4
+    if (bit32.band(modeC, 4) > 0) then
       if (armed == true) then
         modeId = 7
         posHold = true
       end
     end
-    if (modeC >= 2) then
-      modeC = modeC - 2
+    if (bit32.band(modeC, 2) > 0) then
       altHold = true
       if (posHold) then
         modeId = 8
       end
     end
-    if (modeC == 1) then
+    if (bit32.band(modeC, 1) > 0) then
       headingHold = true
     end  
-    if (modeB >= 2) then
-      modeB = modeB - 2
+    if (bit32.band(modeB, 2) > 0) then
       modeId = 9
     end
-    if (modeB == 1) then
+    if (bit32.band(modeB, 4) > 0) then
       modeId = 10
     end
-    if (modeA >= 4) then
+    if (bit32.band(modeA, 4) > 0) then
       modeId = 11
     end
   end
@@ -128,6 +120,7 @@ local function flightModes()
   -- *** Audio feedback on flight modes ***
   vibrate = false
   beep = false
+  rssiLow = false
   if (armed ~= armedPrev) then
     if (armed) then
       data.timerStart = getTime()
@@ -135,23 +128,23 @@ local function flightModes()
       headingRef = data.heading
       data.gpsHome = false
       maxValues = true
+      battPercentPlayed = 100
       batlow = false
-      batcrt = false
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/engarm.wav")
+      playFile(wavPath .. "engarm.wav")
     else
       if (data.distLastPositive < 5) then
         data.distLastPositive = 0
       end
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/engdrm.wav")
+      playFile(wavPath .. "engdrm.wav")
     end
   end
   if (modeIdPrev and modeIdPrev ~= modeId) then
     if (armed == false and modeId == 6 and modeIdPrev == 5) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/ready.wav")
+      playFile(wavPath .. "ready.wav")
     end
     if (armed) then
       if (modes[modeId].w) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/" .. modes[modeId].w)
+        playFile(wavPath .. modes[modeId].w)
       end
       if (modes[modeId].f > 0) then
         vibrate = true
@@ -160,50 +153,71 @@ local function flightModes()
   end
   if (armed) then
     if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/active.wav")
+      playFile(wavPath .. "althld.wav")
+      playFile(wavPath .. "active.wav")
     elseif (altHold == false and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/althld.wav")
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+      playFile(wavPath .. "althld.wav")
+      playFile(wavPath .. "off.wav")
     end
     if (headingHold and headingHoldPrev ~= headingHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhlda.wav")
+      playFile(wavPath .. "hedhlda.wav")
     elseif (headingHold == false and headingHoldPrev ~= headingHold) then
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/hedhld.wav")
-      playFile("/SCRIPTS/TELEMETRY/SOUNDS/off.wav")
+      playFile(wavPath .. "hedhld.wav")
+      playFile(wavPath .. "off.wav")
     end
     if (data.altitude > 400) then
-      if (getTime() > altitudeNextPlay) then
+      if (getTime() > altNextPlay) then
         playNumber(data.altitude, 10)
-        altitudeNextPlay = getTime() + 1000
+        altNextPlay = getTime() + 1000
       else
         beep = true
       end
     end
-    if (data.fuel < 20 or data.cell < 3.4) then
-      if (getTime() > batteryNextPlay) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batcrt.wav")
-        batteryNextPlay = getTime() + 500
+    -- Count down 50%, 40%, 30% battery
+    if (data.fuel % 10 == 0 and data.fuel <= 50 and data.fuel >= 30 and battPercentPlayed > data.fuel) then
+      if (data.fuel == 30) then
+        playFile(wavPath .. "batlow.wav")
+      else
+        playFile(wavPath .. "battry.wav")
+      end
+      playNumber(data.fuel, 13)
+      battPercentPlayed = data.fuel
+    end
+    if (data.fuel <= 20 or data.cell < 3.40) then
+      if (getTime() > battNextPlay) then
+        playFile(wavPath .. "batcrt.wav")
+        if (data.fuel <= 20 and battPercentPlayed > data.fuel) then
+          playNumber(data.fuel, 13)
+          battPercentPlayed = data.fuel
+        end
+        battNextPlay = getTime() + 500
       else
         vibrate = true
         beep = true
       end
       batlow = true
     else
-      batteryNextPlay = 0
+      battNextPlay = 0
     end
-    if (data.fuel < 30 or data.cell < 3.55) then
+    if (data.cell < 3.50) then
       if (batlow == false) then
-        playFile("/SCRIPTS/TELEMETRY/SOUNDS/batlow.wav")
+        playFile(wavPath .. "batlow.wav")
         batlow = true
       end
     end
     if (headFree or modes[modeId].f > 0) then
       beep = true
     end
+    if (data.rssi < data.rssiLow) then
+      if (data.rssi < data.rssiCrit) then
+        vibrate = true
+      end
+      beep = true
+      rssiLow = true
+    end
   end
   if (vibrate) then
-    playHaptic(50, 3000, PLAY_NOW)
+    playHaptic(25, 3000)
   end
   if (beep) then
     playTone(2000, 100, 3000, PLAY_NOW)
@@ -215,6 +229,15 @@ local function flightModes()
 end
 
 local function init()
+  local rssi, low, crit = getRSSI()
+  local ver, radio, maj, minor, rev = getVersion()
+  local general = getGeneralSettings()
+  data.rssiLow = low
+  data.rssiCrit = crit
+  data.version = maj + minor / 10 -- Make sure OpenTX 2.2+
+  data.txBattMin = general["battMin"]
+  data.txBattMax = general["battMax"]
+  data.units = general["imperial"] -- 0 = metric / 1 = imperial
   data.modelName = model.getInfo()["name"]
   data.mode_id = getTelemetryId("Tmp1")
   data.rxBatt_id = getTelemetryId("RxBt")
@@ -244,8 +267,9 @@ local function init()
   data.distLastPositive = 0
   data.gpsHome = false
   maxValues = false
-  altitudeNextPlay = 0
-  batteryNextPlay = 0
+  altNextPlay = 0
+  battNextPlay = 0
+  battPercentPlayed = 100
   noTelemWarn = true
 end
 
@@ -269,8 +293,14 @@ local function background()
     data.currentMax = getValue(data.currentMax_id)
     data.batt = getValue(data.batt_id)
     data.battMin = getValue(data.battMin_id)
-    data.cell = getValue(data.cell_id)
-    data.cellMin = getValue(data.cellMin_id)
+    if (data.cell_id == -1 or test) then
+      data.cells = math.floor(data.batt / 4.3) + 1
+      data.cell = data.batt / data.cells
+      data.cellMin = data.battMin / data.cells
+    else
+      data.cell = getValue(data.cell_id)
+      data.cellMin = getValue(data.cellMin_id)
+    end
     data.fuel = getValue(data.fuel_id)
     data.rssiMin = getValue(data.rssiMin_id)
     data.txBatt = getValue(data.txBatt_id)
@@ -290,8 +320,8 @@ local function background()
   if (type(data.gpsLatLon) == "table") then
     data.gpsGood = true
 
-    -- *** Detect simulator ***
-    --if (data.gpsLatLon["lat"] < 1) then
+    -- Fix GPS coords and distance
+    --if (test) then
     --  data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
     --  data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
     --  if (type(data.gpsHome) == "table") then
@@ -312,6 +342,11 @@ local function run(event)
   lcd.clear()
   background()
 
+  if (data.version < 2.2) then
+    lcd.drawText(5, 27, "OpenTX v2.2.0+ Required")
+    return
+  end
+
   -- *** Title ***
   if (armed) then
     --data.timer = model.getTimer(0)["value"] -- Show timer1 instead of custom timer
@@ -320,8 +355,19 @@ local function run(event)
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, data.modelName, INVERS)
   lcd.drawTimer(60, 1, data.timer, SMLSIZE + TIMEHOUR + INVERS)
-  lcd.drawNumber(88, 1, data.txBatt * 10.05, SMLSIZE + PREC1 + INVERS)
-  lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
+
+  -- Shows Tx battery voltage as number
+  --lcd.drawNumber(88, 1, data.txBatt * 10.05, SMLSIZE + PREC1 + INVERS)
+  --lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
+
+  -- Show Tx battery voltage as graphic
+  lcd.drawFilledRectangle(86, 1, 19, 6, ERASE)
+  lcd.drawLine(105, 2, 105, 5, SOLID, ERASE)
+  local battGauge = math.max(math.min((data.txBatt - data.txBattMin) / (data.txBattMax - data.txBattMin) * 17, 17), 0) + 86
+  for i = 87, battGauge, 2 do
+    lcd.drawLine(i, 2, i, 5, SOLID, FORCE)
+  end
+
   if (data.rxBatt > 0 and data.telemetry) then
     lcd.drawNumber(111, 1, data.rxBatt * 10.05, SMLSIZE + PREC1 + INVERS)
     lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
@@ -474,24 +520,23 @@ local function run(event)
     end
 
     -- *** Bar graphs ***
-    if (data.cell_id == -1 or data.cell == 3) then
-      data.cells = math.floor(data.batt / 4.3) + 1
-      data.cell = data.batt / data.cells
-      data.cellMin = data.battMin / data.cells
-    end
     local battFlags = 0
-    if (telemFlags > 0 or batteryNextPlay > 0) then
+    if (telemFlags > 0 or battNextPlay > 0) then
       battFlags = INVERS + BLINK
     end
     lcd.drawText(0, 41, "Fuel", SMLSIZE)
     lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)
     lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
     if (armed or toggle or maxValues == false) then
+      local rssiFlags = 0
+      if (telemFlags > 0 or rssiLow) then
+        rssiFlags = INVERS + BLINK
+      end
       lcd.drawText(0, 49, "Batt", SMLSIZE)
       lcd.drawNumber(22, 49, data.batt * 10.05, SMLSIZE + PREC1 + battFlags)
       lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + battFlags)
       lcd.drawText(0, 57, "RSSI", SMLSIZE)
-      lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + telemFlags)
+      lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + rssiFlags)
     else
       lcd.drawText(0, 49, "Bat\193", SMLSIZE)
       lcd.drawNumber(22, 49, data.battMin * 10.05, SMLSIZE + PREC1 + telemFlags)
@@ -506,8 +551,13 @@ local function run(event)
     lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
     min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
     lcd.drawLine(min, 50, min, 54, SOLID, ERASE)
-    lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
-    min = 80 * (math.min(data.rssiMin, 99) / 100) + 47
+    -- Show RSSI scale from 0 to 100
+    --lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
+    --min = 80 * (math.min(data.rssiMin, 99) / 100) + 47
+    -- Show RSSI scale from RSSI Critical to 100
+    local rssiGauge = math.max(math.min((data.rssiLast - data.rssiCrit) / (100 - data.rssiCrit) * 100, 98), 0)
+    lcd.drawGauge(46, 57, 82, 7, rssiGauge, 100)
+    min = 80 * (math.max(math.min((data.rssiMin - data.rssiCrit) / (100 - data.rssiCrit) * 100, 99), 0) / 100) + 47
     lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
 
     -- *** Altitude bar graph (maybe use for larger screens?) ***
