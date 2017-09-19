@@ -73,19 +73,19 @@ local function flightModes()
     if (bit32.band(modeE, 4) > 0) then
       armed = true
       if (bit32.band(modeD, 2) > 0) then
-        modeId = 2
+        modeId = 2 -- Horizon mode
       elseif (bit32.band(modeD, 1) > 0) then
-        modeId = 3
+        modeId = 3 -- Angle mode
       else
-        modeId = 4
+        modeId = 4 -- Acro mode
       end
     end
     if (bit32.band(modeE, 2) > 0 or modeE == 0) then
-      modeId = 5
+      modeId = 5 -- Not OK to fly
     else
       ok2arm = true
       if (armed == false) then
-        modeId = 6
+        modeId = 6 -- Ready to fly
       end
     end
     if (bit32.band(modeB, 4) > 0) then
@@ -93,27 +93,27 @@ local function flightModes()
     end
     if (bit32.band(modeC, 4) > 0) then
       if (armed == true) then
-        modeId = 7
+        modeId = 7 -- Position hold
         posHold = true
       end
     end
     if (bit32.band(modeC, 2) > 0) then
       altHold = true
       if (posHold) then
-        modeId = 8
+        modeId = 8 -- 3D potition hold
       end
     end
     if (bit32.band(modeC, 1) > 0) then
       headingHold = true
     end  
     if (bit32.band(modeB, 2) > 0) then
-      modeId = 9
+      modeId = 9 -- Waypoint
     end
     if (bit32.band(modeB, 4) > 0) then
-      modeId = 10
+      modeId = 10 -- Return to home
     end
     if (bit32.band(modeA, 4) > 0) then
-      modeId = 11
+      modeId = 11 -- Failsafe
     end
   end
 
