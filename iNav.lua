@@ -16,15 +16,15 @@ local modeIdPrev = false
 local armedPrev = false
 local headingHoldPrev = false
 local altHoldPrev = false
-local headingRef = 0
-local noTelemWarn = true
+local headingRef = -1
 local altNextPlay = 0
 local battNextPlay = 0
 local battPercentPlayed = 100
 local telemFlags = -1
-local maxValues = false
 local batlow = false
 local rssiLow = false
+local showMax = false
+local showDir = true
 
 -- modes
 --  t = text
@@ -127,13 +127,15 @@ local function flightModes()
       data.distLastPositive = 0
       headingRef = data.heading
       data.gpsHome = false
-      maxValues = true
       battPercentPlayed = 100
       batlow = false
+      showMax = false
+      showDir = false
       playFile(wavPath .. "engarm.wav")
     else
-      if (data.distLastPositive < 5) then
-        data.distLastPositive = 0
+      if (data.distLastPositive < 15) then
+        headingRef = -1
+        showDir = true
       end
       playFile(wavPath .. "engdrm.wav")
     end
@@ -265,11 +267,6 @@ local function init()
   data.timer = 0
   data.distLastPositive = 0
   data.gpsHome = false
-  maxValues = false
-  altNextPlay = 0
-  battNextPlay = 0
-  battPercentPlayed = 100
-  noTelemWarn = true
 end
 
 local function background()
@@ -336,6 +333,7 @@ local function run(event)
   lcd.clear()
   background()
 
+  -- *** Minimum OpenTX version ***
   if (data.version < 2.2) then
     lcd.drawText(5, 27, "OpenTX v2.2.0+ Required")
     return
@@ -349,216 +347,196 @@ local function run(event)
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, data.modelName, INVERS)
   lcd.drawTimer(60, 1, data.timer, SMLSIZE + TIMEHOUR + INVERS)
-
-  -- Shows Tx battery voltage as number
-  --lcd.drawNumber(88, 1, data.txBatt * 10.05, SMLSIZE + PREC1 + INVERS)
-  --lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
-
-  -- Show Tx battery voltage as graphic
   lcd.drawFilledRectangle(86, 1, 19, 6, ERASE)
   lcd.drawLine(105, 2, 105, 5, SOLID, ERASE)
   local battGauge = math.max(math.min((data.txBatt - data.txBattMin) / (data.txBattMax - data.txBattMin) * 17, 17), 0) + 86
   for i = 87, battGauge, 2 do
     lcd.drawLine(i, 2, i, 5, SOLID, FORCE)
   end
-
   if (data.rxBatt > 0 and data.telemetry) then
     lcd.drawNumber(111, 1, data.rxBatt * 10.05, SMLSIZE + PREC1 + INVERS)
     lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
   end
 
-  -- *** Initial warning if there's no telemetry ***
-  if (noTelemWarn and data.telemetry == false) then
-    result = popupWarning("No Telemetry!", event)
-    if (result == "CANCEL") then
-      noTelemWarn = false
-    end
-  else
-    noTelemWarn = false
-    local toggle = math.floor(getTime() / 300) % 2 == 0 and true or false
-
-    -- *** GPS Coords ***
-    if (data.gpsGood) then
-      value = math.floor(data.gpsAlt + 0.5) .. "ft"
-      lcd.drawText(85, 9, value, SMLSIZE)
-      pos = 85 + (129 - lcd.getLastPos())
-      lcd.drawText(pos, 17, value, SMLSIZE + telemFlags)
-
-      value = string.format("%.4f", data.gpsLatLon["lat"])
-      lcd.drawText(85, 9, value, SMLSIZE)
-      pos = 85 + (129 - lcd.getLastPos())
-      lcd.drawText(pos, 25, value, SMLSIZE + telemFlags)
-
-      value = string.format("%.4f", data.gpsLatLon["lon"])
-      lcd.drawText(85, 9, value, SMLSIZE)
-      pos = 85 + (129 - lcd.getLastPos())
-      lcd.drawText(pos, 33, value, SMLSIZE + telemFlags)
-    else
-      lcd.drawFilledRectangle(88, 17, 40, 23, INVERS)
-      lcd.drawText(92, 20, "No GPS", INVERS)
-      lcd.drawText(101, 30, "Fix", INVERS)
-    end
-
-    -- *** Satellites ***
-    value = "Sats " .. tonumber(string.sub(data.satellites, -2))
+  -- *** GPS Coords ***
+  if (data.gpsGood) then
+    value = math.floor(data.gpsAlt + 0.5) .. "ft"
     lcd.drawText(85, 9, value, SMLSIZE)
     pos = 85 + (129 - lcd.getLastPos())
-    lcd.drawText(85, 9, "         ", SMLSIZE)
-    lcd.drawText(pos, 9, value, SMLSIZE + telemFlags)
+    lcd.drawText(pos, 17, value, SMLSIZE + telemFlags)
 
-    -- *** Directional indicator ***
-    center = 19
-    if (data.telemetry) then
-      if (armed) then
-        headingDisplay = data.heading - headingRef
-        size = 10
-        width = 145
-      elseif (type(data.gpsHome) ~= "table" or data.distLastPositive <= 15) then
-        headingDisplay = data.heading
-        lcd.drawText(65, 9, "N", SMLSIZE)
-        lcd.drawText(77, 21, "E", SMLSIZE)
-        lcd.drawText(53, 21, "W", SMLSIZE)
-        size = 6
-        width = 135
-        center = 23
-      end
-      local rad1 = math.rad(headingDisplay)
-      local rad2 = math.rad(headingDisplay + width)
-      local rad3 = math.rad(headingDisplay - width)
-      local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
-      local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
-      local x2 = math.floor(math.sin(rad2) * size + 0.5) + 67
-      local y2 = center - math.floor(math.cos(rad2) * size + 0.5)
-      local x3 = math.floor(math.sin(rad3) * size + 0.5) + 67
-      local y3 = center - math.floor(math.cos(rad3) * size + 0.5)
-      lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
-      lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
-      if (headingHold and armed) then
-        lcd.drawFilledRectangle((x2 + x3) / 2 - 1.5, (y2 + y3) / 2 - 1.5, 4, 4, SOLID)
-      else
-        lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
-      end
-    end
-    if (type(data.gpsHome) == "table" and data.gpsGood and data.distLastPositive > 15) then
-      --http://www.movable-type.co.uk/scripts/latlong.html
-      --var y = Math.sin(λ2-λ1) * Math.cos(φ2);
-      --var x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
-      --var brng = Math.atan2(y, x).toDegrees();
-      o1 = math.rad(data.gpsHome["lat"])
-      a1 = math.rad(data.gpsHome["lon"])
-      o2 = math.rad(data.gpsLatLon["lat"])
-      a2 = math.rad(data.gpsLatLon["lon"])
-      y = math.sin(a2 - a1) * math.cos(o2)
-      x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
-      bearing = math.deg(math.atan2(y, x)) - headingRef
+    value = string.format("%.4f", data.gpsLatLon["lat"])
+    lcd.drawText(85, 9, value, SMLSIZE)
+    pos = 85 + (129 - lcd.getLastPos())
+    lcd.drawText(pos, 25, value, SMLSIZE + telemFlags)
+
+    value = string.format("%.4f", data.gpsLatLon["lon"])
+    lcd.drawText(85, 9, value, SMLSIZE)
+    pos = 85 + (129 - lcd.getLastPos())
+    lcd.drawText(pos, 33, value, SMLSIZE + telemFlags)
+  else
+    lcd.drawFilledRectangle(88, 17, 40, 23, INVERS)
+    lcd.drawText(92, 20, "No GPS", INVERS)
+    lcd.drawText(101, 30, "Fix", INVERS)
+  end
+
+  -- *** Satellites ***
+  value = "Sats " .. tonumber(string.sub(data.satellites, -2))
+  lcd.drawText(85, 9, value, SMLSIZE)
+  pos = 85 + (129 - lcd.getLastPos())
+  lcd.drawText(85, 9, "         ", SMLSIZE)
+  lcd.drawText(pos, 9, value, SMLSIZE + telemFlags)
+
+  -- *** Directional indicator ***
+  if (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or event == EVT_ENTER_BREAK) then
+    showDir = not showDir
+  end
+  center = 19
+  if (data.telemetry) then
+    if (showDir or headingRef < 0) then
+      headingDisplay = data.heading
+      lcd.drawText(65, 9, "N " .. math.floor(data.heading + 0.5) .. "\64", SMLSIZE)
+      lcd.drawText(77, 21, "E", SMLSIZE)
+      lcd.drawText(53, 21, "W", SMLSIZE)
+      size = 7
+      width = 135
+      center = 23
+    elseif (headingRef >= 0) then
+      headingDisplay = data.heading - headingRef
       size = 10
-      --size = math.max(data.distLastPositive / (data.distanceMax * 3.28084 + 0.5) * 10, 5)
-      local rad1 = math.rad(bearing)
-      local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
-      local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
-      lcd.drawLine(67, center, x1, y1, DOTTED, FORCE)
-      lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, ERASE)
-      lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, SOLID)
+      width = 145
     end
-
-    -- *** Head free warning ***
-    if (armed and headFree) then
-      lcd.drawText(85, 9, "HF", SMLSIZE + INVERS + BLINK)
-    end
-
-    -- *** Display flight mode (centered) ***
-    lcd.drawText(48, 34, modes[modeId].t, SMLSIZE + modes[modeId].f)
-    pos = 48 + (87 - lcd.getLastPos()) / 2
-    lcd.drawFilledRectangle(46, 33, 40, 10, ERASE)
-    lcd.drawText(pos, 33, modes[modeId].t, SMLSIZE + modes[modeId].f)
-
-    -- *** Data ***
-    if (armed or toggle or maxValues == false) then
-      altd = data.altitude
-      dist = data.distLastPositive
-      sped = data.speed
-      curr = data.current
-      lcd.drawText(0,  9, "Altd ", SMLSIZE)
-      lcd.drawText(0, 17, "Dist", SMLSIZE)
-      lcd.drawText(0, 25, "Sped", SMLSIZE)
-      lcd.drawText(0, 33, "Curr", SMLSIZE)
+    local rad1 = math.rad(headingDisplay)
+    local rad2 = math.rad(headingDisplay + width)
+    local rad3 = math.rad(headingDisplay - width)
+    local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
+    local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
+    local x2 = math.floor(math.sin(rad2) * size + 0.5) + 67
+    local y2 = center - math.floor(math.cos(rad2) * size + 0.5)
+    local x3 = math.floor(math.sin(rad3) * size + 0.5) + 67
+    local y3 = center - math.floor(math.cos(rad3) * size + 0.5)
+    lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
+    lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
+    if (headingHold and armed) then
+      lcd.drawFilledRectangle((x2 + x3) / 2 - 1.5, (y2 + y3) / 2 - 1.5, 4, 4, SOLID)
     else
-      altd = data.altitudeMax
-      dist = math.floor(data.distanceMax * 3.28084 + 0.5)
-      sped = data.speedMax
-      curr = data.currentMax
-      lcd.drawText(0,  9, "Alt", SMLSIZE)
-      lcd.drawText(15, 9, "\192", SMLSIZE)
-      lcd.drawText(0, 17, "Dst\192", SMLSIZE)
-      lcd.drawText(0, 25, "Spd\192", SMLSIZE)
-      lcd.drawText(0, 33, "Cur\192", SMLSIZE)
+      lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
     end
-    lcd.drawText(22, 9, math.floor(altd + 0.5), SMLSIZE + telemFlags)
-    if (altd < 1000) then
-      lcd.drawText(lcd.getLastPos(), 9, "ft", SMLSIZE + telemFlags)
-    end
-    if (armed and altHold and modes[modeId].a) then
-      lcd.drawText(lcd.getLastPos() + 1, 9, "\192", SMLSIZE + INVERS) -- Altitude hold notification
-    end
-    lcd.drawText(22, 17, dist, SMLSIZE + telemFlags)
-    if (dist < 1000) then
-      lcd.drawText(lcd.getLastPos(), 17, "ft", SMLSIZE + telemFlags)
-    end
-    lcd.drawText(22, 25, math.floor(sped + 0.5), SMLSIZE + telemFlags)
-    if (sped < 100) then
-      lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE + telemFlags)
-    end
-    lcd.drawNumber(22, 33, curr * 10.05, SMLSIZE + PREC1 + telemFlags)
-    if (curr < 100) then
-      lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE + telemFlags)
-    end
+  end
+  if (not showDir and type(data.gpsHome) == "table" and data.gpsGood and data.distLastPositive >= 25) then
+    o1 = math.rad(data.gpsHome["lat"])
+    a1 = math.rad(data.gpsHome["lon"])
+    o2 = math.rad(data.gpsLatLon["lat"])
+    a2 = math.rad(data.gpsLatLon["lon"])
+    y = math.sin(a2 - a1) * math.cos(o2)
+    x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
+    bearing = math.deg(math.atan2(y, x)) - headingRef
+    size = 10
+    local rad1 = math.rad(bearing)
+    local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
+    local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
+    lcd.drawLine(67, center, x1, y1, DOTTED, FORCE)
+    lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, ERASE)
+    lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, SOLID)
+  end
 
-    -- *** Bar graphs ***
-    local battFlags = 0
-    if (telemFlags > 0 or battNextPlay > 0) then
-      battFlags = INVERS + BLINK
-    end
-    lcd.drawText(0, 41, "Fuel", SMLSIZE)
-    lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)
-    lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
-    if (armed or toggle or maxValues == false) then
-      local rssiFlags = 0
-      if (telemFlags > 0 or rssiLow) then
-        rssiFlags = INVERS + BLINK
-      end
-      lcd.drawText(0, 49, "Batt", SMLSIZE)
-      lcd.drawNumber(22, 49, data.batt * 10.05, SMLSIZE + PREC1 + battFlags)
-      lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + battFlags)
-      lcd.drawText(0, 57, "RSSI", SMLSIZE)
-      lcd.drawText(22, 57, data.rssiLast .. "dB", SMLSIZE + rssiFlags)
-    else
-      lcd.drawText(0, 49, "Bat\193", SMLSIZE)
-      lcd.drawNumber(22, 49, data.battMin * 10.05, SMLSIZE + PREC1 + telemFlags)
-      lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + telemFlags)
-      lcd.drawText(0, 57, "RSI", SMLSIZE)
-      lcd.drawText(15, 57, "\193", SMLSIZE)
-      lcd.drawText(22, 57, data.rssiMin .. "dB", SMLSIZE + telemFlags)
-    end
-    if (data.fuel == 0) then
-      lcd.drawLine(47, 42, 47, 46, SOLID, ERASE)
-    end
-    lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
-    min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
-    lcd.drawLine(min, 50, min, 54, SOLID, ERASE)
-    -- Show RSSI scale from 0 to 100
-    --lcd.drawGauge(46, 57, 82, 7, math.min(data.rssiLast, 98), 100)
-    --min = 80 * (math.min(data.rssiMin, 99) / 100) + 47
-    -- Show RSSI scale from RSSI Critical to 100
-    local rssiGauge = math.max(math.min((data.rssiLast - data.rssiCrit) / (100 - data.rssiCrit) * 100, 98), 0)
-    lcd.drawGauge(46, 57, 82, 7, rssiGauge, 100)
-    min = 80 * (math.max(math.min((data.rssiMin - data.rssiCrit) / (100 - data.rssiCrit) * 100, 99), 0) / 100) + 47
-    lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
+  -- *** Head free warning ***
+  if (armed and headFree) then
+    lcd.drawText(85, 9, "HF", SMLSIZE + INVERS + BLINK)
+  end
 
-    -- *** Altitude bar graph (maybe use for larger screens?) ***
-    --lcd.drawRectangle(124, 9, 4, 55, SOLID)
-    --height = math.max(math.min(math.ceil(data.altitude / 400 * 53), 53), 1)
-    --lcd.drawRectangle(125, 63 - height, 2, height, SOLID)
+  -- *** Display flight mode (centered) ***
+  lcd.drawText(48, 34, modes[modeId].t, SMLSIZE + modes[modeId].f)
+  pos = 48 + (87 - lcd.getLastPos()) / 2
+  lcd.drawFilledRectangle(46, 33, 40, 10, ERASE)
+  lcd.drawText(pos, 33, modes[modeId].t, SMLSIZE + modes[modeId].f)
 
+  -- *** Data ***
+  if (not armed) then
+    if (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or event == EVT_ENTER_BREAK) then
+      showMax = not showMax
+    end
+  end
+  if (not showMax) then
+    altd = data.altitude
+    dist = data.distLastPositive
+    sped = data.speed
+    curr = data.current
+    batt = data.batt
+    rssi = data.rssiLast
+    lcd.drawText(0,  9, "Altd ", SMLSIZE)
+    lcd.drawText(0, 17, "Dist", SMLSIZE)
+    lcd.drawText(0, 25, "Sped", SMLSIZE)
+    lcd.drawText(0, 33, "Curr", SMLSIZE)
+    lcd.drawText(0, 49, "Batt", SMLSIZE)
+    lcd.drawText(0, 57, "RSSI", SMLSIZE)
+  else
+    altd = data.altitudeMax
+    dist = math.floor(data.distanceMax * 3.28084 + 0.5)
+    sped = data.speedMax
+    curr = data.currentMax
+    batt = data.battMin
+    rssi = data.rssiMin
+    lcd.drawText(0,  9, "Alt", SMLSIZE)
+    lcd.drawText(15, 9, "\192", SMLSIZE)
+    lcd.drawText(0, 17, "Dst\192", SMLSIZE)
+    lcd.drawText(0, 25, "Spd\192", SMLSIZE)
+    lcd.drawText(0, 33, "Cur\192", SMLSIZE)
+    lcd.drawText(0, 49, "Bat\193", SMLSIZE)
+    lcd.drawText(0, 57, "RSI", SMLSIZE)
+    lcd.drawText(15, 57, "\193", SMLSIZE)
+  end
+  lcd.drawText(0, 41, "Fuel", SMLSIZE)
+  lcd.drawText(22, 9, math.floor(altd + 0.5), SMLSIZE + telemFlags)
+  if (altd < 1000) then
+    lcd.drawText(lcd.getLastPos(), 9, "ft", SMLSIZE + telemFlags)
+  end
+  if (armed and altHold and modes[modeId].a) then
+    lcd.drawText(lcd.getLastPos() + 1, 9, "\192", SMLSIZE + INVERS) -- Altitude hold notification
+  end
+  lcd.drawText(22, 17, dist, SMLSIZE + telemFlags)
+  if (dist < 1000) then
+    lcd.drawText(lcd.getLastPos(), 17, "ft", SMLSIZE + telemFlags)
+  end
+  lcd.drawText(22, 25, math.floor(sped + 0.5), SMLSIZE + telemFlags)
+  if (sped < 100) then
+    lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE + telemFlags)
+  end
+  lcd.drawNumber(22, 33, curr * 10.05, SMLSIZE + PREC1 + telemFlags)
+  if (curr < 100) then
+    lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE + telemFlags)
+  end
+  local battFlags = 0
+  if (telemFlags > 0 or battNextPlay > 0) then
+    battFlags = INVERS + BLINK
+  end
+  lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)
+  lcd.drawNumber(22, 49, batt * 10.05, SMLSIZE + PREC1 + battFlags)
+  lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + battFlags)
+  local rssiFlags = 0
+  if (telemFlags > 0 or rssiLow) then
+    rssiFlags = INVERS + BLINK
+  end
+  lcd.drawText(22, 57, rssi .. "dB", SMLSIZE + rssiFlags)
+
+  -- *** Bar graphs ***
+  lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
+  if (data.fuel == 0) then
+    lcd.drawLine(47, 42, 47, 46, SOLID, ERASE)
+  end
+  lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
+  min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
+  lcd.drawLine(min, 50, min, 54, SOLID, ERASE)
+  local rssiGauge = math.max(math.min((data.rssiLast - data.rssiCrit) / (100 - data.rssiCrit) * 100, 98), 0)
+  lcd.drawGauge(46, 57, 82, 7, rssiGauge, 100)
+  min = 80 * (math.max(math.min((data.rssiMin - data.rssiCrit) / (100 - data.rssiCrit) * 100, 99), 0) / 100) + 47
+  lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
+
+  -- *** Altitude graph for wide screens ***
+  if (LCD_W >= 212) then
+    lcd.drawRectangle(135, 9, LCD_W - 135, 55, SOLID)
+    height = math.max(math.min(math.ceil(data.altitude / 400 * 53), 53), 1)
+    lcd.drawFilledRectangle(136, 63 - height, LCD_W - 137, height, INVERS)
   end
 
   return 1
