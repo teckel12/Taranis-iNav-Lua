@@ -1,6 +1,6 @@
 # Taranis iNav Lua Script
 
-Flight status panel for Taranis transmitter when running iNav
+Flight status screen for Taranis transmitter when running iNav
 
 ![sample](http://www.leethost.com/link_pics/iNav.png "iNav Lua Script")
 
