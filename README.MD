@@ -1,14 +1,15 @@
-# Taranis Q X7 iNav Lua Script
+# Taranis iNav Lua Script
 
-Flight status panel for Taranis Q X7 transmitter when running iNav
+Flight status panel for Taranis transmitter when running iNav
 
 ![sample](http://www.leethost.com/link_pics/iNav.png "iNav Lua Script")
 
 ## Requirements
 
-* A FrSky receiver that supports telemetry, such as X4R(SB), X8R, XSR.
-* [iNav v1.7.3+](https://github.com/iNavFlight/inav/releases) running on your flight controller.
-* Designed to work on a TaranisQ X7. Should work on other Taranis transmitters, but it (currently) won't fill the entire display.
+* OpenTX v2.2.0 running on Taranis Q X7/X9D/X9D+/X9E
+* A FrSky receiver that supports telemetry, such as X4R(SB), X8R, XSR
+* [iNav v1.7.3+](https://github.com/iNavFlight/inav/releases) running on your flight controller
+* Designed to work on a Taranis Q X7. Should work on other Taranis transmitters, but untested
 
 ## Setup
 
@@ -21,6 +22,12 @@ Flight status panel for Taranis Q X7 transmitter when running iNav
 
 * Telemetry distance sensor name must be changed from `0420` to `Dist`
 * Sensors must be changed to US measurements (m to ft, km/h to mph, etc)
+
+### iNav Lua Script Setup
+
+1. Copy `iNav.lua` file to Taranis SD card's `\SCRIPTS\TELEMETRY\` folder
+2. Copy `iNav` folder to Taranis SD card's `\SCRIPTS\TELEMETRY\` folder
+3. In model setup, page to the `DISPLAY` page, set desired screen to `Script`, and select `iNav`
 
 ## Release History
 
