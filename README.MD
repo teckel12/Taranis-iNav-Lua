@@ -37,14 +37,15 @@ Flight status screen for Taranis transmitter when running iNav
 
 ## Usage
 
-From the Taranis main screen, hold the `Page` button to show custom screens, and page to the scrren you set to show iNav.
+From the Taranis main screen, hold the `Page` button to show custom screens, then page to the screen you set to show iNav.
 Flashing values are either because there's no telemetry or a warning.
 To flip between max/min values and current, use the dial or enter key.
 To flip between model direction and orientation based on launch direction, use the dial or enter key.
 If craft is 25 feet or further away, the launch direction view will show the direction of the model based upon launch position and orientation.
 This can be used to locate a lost model, using the directional indicator and distance.
 The orientation view is useful if model orientation is lost.
-The script gives audio information for flight modes, battery levels, and warnings, no need to manually set this up for each model. 
+The script gives audio feedback for flight modes, battery levels, and warnings (no need to manually set this up for each model).
+Audio feedback will play in background even if iNav Lua Script screen is not displayed.
 
 ## Release History
 
