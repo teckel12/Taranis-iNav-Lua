@@ -1,4 +1,4 @@
--- Taranis Q X7 iNav Flight Status Panel - v1.0
+-- Taranis iNav Flight Status Panel - v1.0
 -- Author: teckel12
 -- https://github.com/teckel12/Taranis-iNav-Lua
 -- Telemetry distance sensor name must be changed from '0420' to 'Dist'
@@ -11,7 +11,6 @@
 local wavPath = "/SCRIPTS/TELEMETRY/iNav/"
 
 --local test = true
-local armed = false
 local modeIdPrev = false
 local armedPrev = false
 local headingHoldPrev = false
@@ -22,7 +21,6 @@ local battNextPlay = 0
 local battPercentPlayed = 100
 local telemFlags = -1
 local batlow = false
-local rssiLow = false
 local showMax = false
 local showDir = true
 
@@ -61,7 +59,6 @@ local function flightModes()
   headFree = false
   headingHold = false
   altHold = false
-  modeId = 1
   ok2arm = false
   posHold = false
   if (data.telemetry) then
@@ -84,7 +81,7 @@ local function flightModes()
       modeId = 5 -- Not OK to fly
     else
       ok2arm = true
-      if (armed == false) then
+      if (not armed) then
         modeId = 6 -- Ready to fly
       end
     end
@@ -92,7 +89,7 @@ local function flightModes()
       headFree = true
     end
     if (bit32.band(modeC, 4) > 0) then
-      if (armed == true) then
+      if (armed) then
         modeId = 7 -- Position hold
         posHold = true
       end
@@ -115,12 +112,13 @@ local function flightModes()
     if (bit32.band(modeA, 4) > 0) then
       modeId = 11 -- Failsafe
     end
+  else
+    modeId = 1 -- No telemetry
   end
 
   -- *** Audio feedback on flight modes ***
-  vibrate = false
-  beep = false
-  rssiLow = false
+  local vibrate = false
+  local beep = false
   if (armed ~= armedPrev) then
     if (armed) then
       data.timerStart = getTime()
@@ -141,7 +139,7 @@ local function flightModes()
     end
   end
   if (modeIdPrev and modeIdPrev ~= modeId) then
-    if (armed == false and modeId == 6 and modeIdPrev == 5) then
+    if (not armed and modeId == 6 and modeIdPrev == 5) then
       playFile(wavPath .. "ready.wav")
     end
     if (armed) then
@@ -157,13 +155,13 @@ local function flightModes()
     if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
       playFile(wavPath .. "althld.wav")
       playFile(wavPath .. "active.wav")
-    elseif (altHold == false and modes[modeId].a and altHoldPrev ~= altHold) then
+    elseif (not altHold and modes[modeId].a and altHoldPrev ~= altHold) then
       playFile(wavPath .. "althld.wav")
       playFile(wavPath .. "off.wav")
     end
     if (headingHold and headingHoldPrev ~= headingHold) then
       playFile(wavPath .. "hedhlda.wav")
-    elseif (headingHold == false and headingHoldPrev ~= headingHold) then
+    elseif (not headingHold and headingHoldPrev ~= headingHold) then
       playFile(wavPath .. "hedhld.wav")
       playFile(wavPath .. "off.wav")
     end
@@ -203,7 +201,7 @@ local function flightModes()
       battNextPlay = 0
     end
     if (data.cell < 3.50) then
-      if (batlow == false) then
+      if (not batlow) then
         playFile(wavPath .. "batlow.wav")
         batlow = true
       end
@@ -216,7 +214,6 @@ local function flightModes()
         vibrate = true
       end
       beep = true
-      rssiLow = true
     end
   end
   if (vibrate) then
@@ -307,25 +304,20 @@ local function background()
 
   flightModes()
 
-  data.gpsGood = false
-  if (type(data.gpsLatLon) == "table") then
-    data.gpsGood = true
+  -- Fix GPS coords and distance
+  --if (test and type(data.gpsLatLon) == "table") then
+  --  data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
+  --  data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
+  --  if (type(data.gpsHome) == "table") then
+  --    factor = math.cos(math.rad(data.gpsHome["lat"]))
+  --    y = math.abs(data.gpsHome["lat"] - data.gpsLatLon["lat"]) * 365228.2
+  --    x = math.abs(data.gpsHome["lon"] - data.gpsLatLon["lon"]) * 364610.4 * factor
+  --    data.distLastPositive = math.floor(math.sqrt(x ^ 2 + y ^ 2) + 0.5)
+  --  end
+  --end
 
-    -- Fix GPS coords and distance
-    --if (test) then
-    --  data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
-    --  data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
-    --  if (type(data.gpsHome) == "table") then
-    --    factor = math.cos(math.rad(data.gpsHome["lat"]))
-    --    y = math.abs(data.gpsHome["lat"] - data.gpsLatLon["lat"]) * 365228.2
-    --    x = math.abs(data.gpsHome["lon"] - data.gpsLatLon["lon"]) * 364610.4 * factor
-    --    data.distLastPositive = math.floor(math.sqrt(x ^ 2 + y ^ 2) + 0.5)
-    --  end
-    --end
-
-    if (armed and type(data.gpsHome) ~= "table") then
-      data.gpsHome = data.gpsLatLon
-    end
+  if (armed and type(data.gpsLatLon) == "table" and type(data.gpsHome) ~= "table") then
+    data.gpsHome = data.gpsLatLon
   end
 end
 
@@ -359,7 +351,7 @@ local function run(event)
   end
 
   -- *** GPS Coords ***
-  if (data.gpsGood) then
+  if (type(data.gpsLatLon) == "table") then
     value = math.floor(data.gpsAlt + 0.5) .. "ft"
     lcd.drawText(85, 9, value, SMLSIZE)
     pos = 85 + (129 - lcd.getLastPos())
@@ -423,7 +415,7 @@ local function run(event)
       lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
     end
   end
-  if (not showDir and type(data.gpsHome) == "table" and data.gpsGood and data.distLastPositive >= 25) then
+  if (not showDir and type(data.gpsHome) == "table" and type(data.gpsLatLon) == "table" and data.distLastPositive >= 25) then
     o1 = math.rad(data.gpsHome["lat"])
     a1 = math.rad(data.gpsHome["lon"])
     o2 = math.rad(data.gpsLatLon["lat"])
@@ -457,20 +449,7 @@ local function run(event)
       showMax = not showMax
     end
   end
-  if (not showMax) then
-    altd = data.altitude
-    dist = data.distLastPositive
-    sped = data.speed
-    curr = data.current
-    batt = data.batt
-    rssi = data.rssiLast
-    lcd.drawText(0,  9, "Altd ", SMLSIZE)
-    lcd.drawText(0, 17, "Dist", SMLSIZE)
-    lcd.drawText(0, 25, "Sped", SMLSIZE)
-    lcd.drawText(0, 33, "Curr", SMLSIZE)
-    lcd.drawText(0, 49, "Batt", SMLSIZE)
-    lcd.drawText(0, 57, "RSSI", SMLSIZE)
-  else
+  if (showMax) then
     altd = data.altitudeMax
     dist = math.floor(data.distanceMax * 3.28084 + 0.5)
     sped = data.speedMax
@@ -485,6 +464,19 @@ local function run(event)
     lcd.drawText(0, 49, "Bat\193", SMLSIZE)
     lcd.drawText(0, 57, "RSI", SMLSIZE)
     lcd.drawText(15, 57, "\193", SMLSIZE)
+  else
+    altd = data.altitude
+    dist = data.distLastPositive
+    sped = data.speed
+    curr = data.current
+    batt = data.batt
+    rssi = data.rssiLast
+    lcd.drawText(0,  9, "Altd ", SMLSIZE)
+    lcd.drawText(0, 17, "Dist", SMLSIZE)
+    lcd.drawText(0, 25, "Sped", SMLSIZE)
+    lcd.drawText(0, 33, "Curr", SMLSIZE)
+    lcd.drawText(0, 49, "Batt", SMLSIZE)
+    lcd.drawText(0, 57, "RSSI", SMLSIZE)
   end
   lcd.drawText(0, 41, "Fuel", SMLSIZE)
   lcd.drawText(22, 9, math.floor(altd + 0.5), SMLSIZE + telemFlags)
@@ -514,7 +506,7 @@ local function run(event)
   lcd.drawNumber(22, 49, batt * 10.05, SMLSIZE + PREC1 + battFlags)
   lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + battFlags)
   local rssiFlags = 0
-  if (telemFlags > 0 or rssiLow) then
+  if (telemFlags > 0 or data.rssi < data.rssiLow) then
     rssiFlags = INVERS + BLINK
   end
   lcd.drawText(22, 57, rssi .. "dB", SMLSIZE + rssiFlags)
