@@ -11,22 +11,25 @@ Flight status screen for Taranis transmitter when running iNav
 * A FrSky receiver that supports telemetry, such as X4R(SB), X8R, XSR
 * [iNav v1.7.3+](https://github.com/iNavFlight/inav/releases) running on your flight controller
 * GPS, altimeter, and compass sensors
-* Amperage sensor currently needed for fuel gauge (future version should make this optional)
+* Optional amperage sensor needed for fuel and current displays
 
 ## Notes
 
 * Designed to work on a Taranis Q X7 (should work on other Taranis transmitters but untested)
-* Designed for a multirotor copter
+* Designed for a multirotor model, but should be valuable for fixed wing
+* Uses Taranis settings for RSSI warning/critical levels for graph and warnings
+* Uses Taranis settings for transmitter voltage min/max for battery graphic in screen title
 
 ## Setup
 
 ### In iNav Configurator
 
 * Setup telemetry to send to your transmitter - [iNav telemetry docs](https://github.com/iNavFlight/inav/blob/master/docs/Telemetry.md)
-* Configure `battery_capacity` and set `smartport_fuel_percent = ON` in CLI settings
+* If you have an amperage sensor, configure `battery_capacity` and set `smartport_fuel_percent = ON` in CLI settings
 
 ### From Transmitter
 
+* Discover telemetry sensors once GPS locked on model so all telemetry sensors are discovered
 * Telemetry distance sensor name must be changed from `0420` to `Dist`
 * Sensors must be changed to US measurements (m to ft, km/h to mph, etc)
 
@@ -34,17 +37,17 @@ Flight status screen for Taranis transmitter when running iNav
 
 1. Copy `iNav.lua` file to Taranis SD card's `\SCRIPTS\TELEMETRY\` folder
 2. Copy `iNav` folder to Taranis SD card's `\SCRIPTS\TELEMETRY\` folder
-3. In model setup, page to the `DISPLAY`, set desired screen to `Script`, and select `iNav`
+3. In model setup, page to `DISPLAY`, set desired screen to `Script`, and select `iNav`
 
 ## Usage
 
 From the Taranis main screen, hold the `Page` button to show custom screens, then page to the screen you set to show iNav.
 Flashing values are either because there's no telemetry or a warning.
-To flip between max/min values and current, use the dial or enter key.
-To flip between model direction and orientation based on launch direction, use the dial or enter key.
-If craft is 25 feet or further away, the launch direction view will show the direction of the model based upon launch position and orientation.
-This can be used to locate a lost model, using the directional indicator and distance.
-The orientation view is useful if model orientation is lost.
+To flip between max/min values and current values, use the dial or enter key.
+To flip between compass-based direction and launch-based orientation and location, use the dial or enter key.
+If model is further than 25 feet away, the launch direction view will show the direction of the model based upon launch position and orientation.
+This can be used to locate a lost model, using the launch-based model location indicator and distance.
+The launch-based orientation view is useful if model orientation is unknown.
 The script gives audio feedback for flight modes, battery levels, and warnings (no need to manually set this up for each model).
 Audio feedback will play in background even if iNav Lua Script screen is not displayed.
 
@@ -56,7 +59,5 @@ Audio feedback will play in background even if iNav Lua Script screen is not dis
 ## Todo
 
 * Automatically switch between metric and imperial (currently fixed to imperial)
-* Possible option to display value of timer 1 instead of automatic flight timer
-* If model doesn't have a amperage sensor don't show graph
-* If `battery_capacity` or `smartport_fuel_percent = ON` not set, don't show fuel meter
+* Possible option to display value of timer instead of automatic flight timer built into script
 * Options for when sound files play
