@@ -20,7 +20,7 @@ local altNextPlay = 0
 local battNextPlay = 0
 local battPercentPlayed = 100
 local telemFlags = -1
-local batlow = false
+local battlow = false
 local showMax = false
 local showDir = true
 
@@ -126,7 +126,7 @@ local function flightModes()
       headingRef = data.heading
       data.gpsHome = false
       battPercentPlayed = 100
-      batlow = false
+      battlow = false
       showMax = false
       showDir = false
       playFile(wavPath .. "engarm.wav")
@@ -196,14 +196,14 @@ local function flightModes()
         vibrate = true
         beep = true
       end
-      batlow = true
+      battlow = true
     else
       battNextPlay = 0
     end
     if (data.cell < 3.50) then
-      if (not batlow) then
+      if (not battlow) then
         playFile(wavPath .. "batlow.wav")
-        batlow = true
+        battlow = true
       end
     end
     if (headFree or modes[modeId].f > 0) then
@@ -215,13 +215,16 @@ local function flightModes()
       end
       beep = true
     end
+    if (vibrate) then
+      playHaptic(25, 3000)
+    end
+    if (beep) then
+      playTone(2000, 100, 3000, PLAY_NOW)
+    end    
   end
-  if (vibrate) then
-    playHaptic(25, 3000)
+  if (data.fuel > 20) then
+    battlow = false
   end
-  if (beep) then
-    playTone(2000, 100, 3000, PLAY_NOW)
-  end    
   modeIdPrev = modeId
   headingHoldPrev = headingHold
   altHoldPrev = altHold
@@ -499,7 +502,7 @@ local function run(event)
     lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE + telemFlags)
   end
   local battFlags = 0
-  if (telemFlags > 0 or battNextPlay > 0) then
+  if (telemFlags > 0 or battlow) then
     battFlags = INVERS + BLINK
   end
   lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)

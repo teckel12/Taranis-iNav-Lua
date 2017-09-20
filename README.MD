@@ -2,7 +2,8 @@
 
 Flight status screen for Taranis transmitter when running iNav
 
-![sample](http://www.leethost.com/link_pics/iNav.png "iNav Lua Script")
+![sample](http://www.leethost.com/link_pics/iNav1.png "Showing launch-based orientation and location")
+![sample](http://www.leethost.com/link_pics/iNav2.png "Showing compass-based direction")
 
 ## Requirements
 
