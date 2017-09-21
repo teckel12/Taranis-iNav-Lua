@@ -227,13 +227,6 @@ local function flightModes()
     battlow = false
     battPercentPlayed = 100
   end
-  --if (showCurr and data.fuel > 20) then
-  --  if (data.cell > 3.50) then
-  --    battlow = false
-  --  end
-  --elseif (not showCurr and data.cell > 3.50) then
-  --  battlow = false
-  --end
   modeIdPrev = modeId
   headingHoldPrev = headingHold
   altHoldPrev = altHold
