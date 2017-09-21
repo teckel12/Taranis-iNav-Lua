@@ -6,7 +6,8 @@
 -- X9D/X9D+/X9E LCD_W = 212 / LCD_H = 64
 -- X10/X12S LCD_W = 480 / LCD_H = 272
 
-local wavPath = "/SCRIPTS/TELEMETRY/iNav/"
+local WAVPATH = "/SCRIPTS/TELEMETRY/iNav/"
+local FLASH = INVERS + BLINK
 
 --local test = true
 local modeIdPrev = false
@@ -131,28 +132,28 @@ local function flightModes()
     battlow = false
     showMax = false
     showDir = false
-    playFile(wavPath .. "engarm.wav")
+    playFile(WAVPATH .. "engarm.wav")
   elseif (not armed and armedPrev) then
     if (data.distLastPositive < 15) then
       headingRef = -1
       showDir = true
     end
-    playFile(wavPath .. "engdrm.wav")
+    playFile(WAVPATH .. "engdrm.wav")
   end
   if (gpsFix and not gpsFixPrev) then
-    playFile(wavPath .. "gps.wav")
-    playFile(wavPath .. "good.wav")
+    playFile(WAVPATH .. "gps.wav")
+    playFile(WAVPATH .. "good.wav")
   elseif (not gpsFix and gpsFixPrev) then
-    playFile(wavPath .. "gps.wav")
-    playFile(wavPath .. "lost.wav")
+    playFile(WAVPATH .. "gps.wav")
+    playFile(WAVPATH .. "lost.wav")
   end
   if (modeIdPrev and modeIdPrev ~= modeId) then
     if (not armed and modeId == 6 and modeIdPrev == 5) then
-      playFile(wavPath .. modes[modeId].w)
+      playFile(WAVPATH .. modes[modeId].w)
     end
     if (armed) then
       if (modes[modeId].w) then
-        playFile(wavPath .. modes[modeId].w)
+        playFile(WAVPATH .. modes[modeId].w)
       end
       if (modes[modeId].f > 0) then
         vibrate = true
@@ -161,17 +162,17 @@ local function flightModes()
   end
   if (armed) then
     if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile(wavPath .. "althld.wav")
-      playFile(wavPath .. "active.wav")
+      playFile(WAVPATH .. "althld.wav")
+      playFile(WAVPATH .. "active.wav")
     elseif (not altHold and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile(wavPath .. "althld.wav")
-      playFile(wavPath .. "off.wav")
+      playFile(WAVPATH .. "althld.wav")
+      playFile(WAVPATH .. "off.wav")
     end
     if (headingHold and headingHoldPrev ~= headingHold) then
-      playFile(wavPath .. "hedhlda.wav")
+      playFile(WAVPATH .. "hedhlda.wav")
     elseif (not headingHold and headingHoldPrev ~= headingHold) then
-      playFile(wavPath .. "hedhld.wav")
-      playFile(wavPath .. "off.wav")
+      playFile(WAVPATH .. "hedhld.wav")
+      playFile(WAVPATH .. "off.wav")
     end
     if (data.altitude > 400) then
       if (getTime() > altNextPlay) then
@@ -183,18 +184,18 @@ local function flightModes()
     end
     if (battPercentPlayed > data.fuel) then
       if (data.fuel == 30 or data.fuel == 25) then
-        playFile(wavPath .. "batlow.wav")
+        playFile(WAVPATH .. "batlow.wav")
         playNumber(data.fuel, 13)
         battPercentPlayed = data.fuel
       elseif (data.fuel % 10 == 0 and data.fuel < 100 and data.fuel >= 40) then
-        playFile(wavPath .. "battry.wav")
+        playFile(WAVPATH .. "battry.wav")
         playNumber(data.fuel, 13)
         battPercentPlayed = data.fuel
       end
     end
     if (data.fuel <= 20 or data.cell < 3.40) then
       if (getTime() > battNextPlay) then
-        playFile(wavPath .. "batcrt.wav")
+        playFile(WAVPATH .. "batcrt.wav")
         if (data.fuel <= 20 and battPercentPlayed > data.fuel) then
           playNumber(data.fuel, 13)
           battPercentPlayed = data.fuel
@@ -207,7 +208,7 @@ local function flightModes()
       battlow = true
     elseif (data.cell < 3.50) then
       if (not battlow) then
-        playFile(wavPath .. "batlow.wav")
+        playFile(WAVPATH .. "batlow.wav")
         battlow = true
       end
     else
@@ -322,7 +323,7 @@ local function background()
     telemFlags = 0
   else
     data.telemetry = false
-    telemFlags = INVERS + BLINK
+    telemFlags = FLASH
   end
 
   flightModes()
@@ -375,20 +376,21 @@ local function run(event)
 
   -- *** GPS Coords ***
   if (type(data.gpsLatLon) == "table") then
+    gpsFlags = (telemFlags > 0 or not gpsFix) and FLASH or 0
     value = math.floor(data.gpsAlt + 0.5) .. "ft"
     lcd.drawText(85, 9, value, SMLSIZE)
     pos = 85 + (129 - lcd.getLastPos())
-    lcd.drawText(pos, 17, value, SMLSIZE + telemFlags)
+    lcd.drawText(pos, 17, value, SMLSIZE + gpsFlags)
 
     value = string.format("%.4f", data.gpsLatLon["lat"])
     lcd.drawText(85, 9, value, SMLSIZE)
     pos = 85 + (129 - lcd.getLastPos())
-    lcd.drawText(pos, 25, value, SMLSIZE + telemFlags)
+    lcd.drawText(pos, 25, value, SMLSIZE + gpsFlags)
 
     value = string.format("%.4f", data.gpsLatLon["lon"])
     lcd.drawText(85, 9, value, SMLSIZE)
     pos = 85 + (129 - lcd.getLastPos())
-    lcd.drawText(pos, 33, value, SMLSIZE + telemFlags)
+    lcd.drawText(pos, 33, value, SMLSIZE + gpsFlags)
   else
     lcd.drawFilledRectangle(88, 17, 40, 23, INVERS)
     lcd.drawText(92, 20, "No GPS", INVERS)
@@ -457,7 +459,7 @@ local function run(event)
 
   -- *** Head free warning ***
   if (armed and headFree) then
-    lcd.drawText(85, 9, "HF", SMLSIZE + INVERS + BLINK)
+    lcd.drawText(85, 9, "HF", SMLSIZE + FLASH)
   end
 
   -- *** Display flight mode (centered) ***
@@ -520,10 +522,7 @@ local function run(event)
   if (sped < 100) then
     lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE + telemFlags)
   end
-  local battFlags = 0
-  if (telemFlags > 0 or battlow) then
-    battFlags = INVERS + BLINK
-  end
+  battFlags = (telemFlags > 0 or battlow) and FLASH or 0
   if (showCurr) then
     lcd.drawNumber(22, 33, curr * 10.05, SMLSIZE + PREC1 + telemFlags)
     if (curr < 100) then
@@ -534,10 +533,7 @@ local function run(event)
   end
   lcd.drawNumber(22, battPos1, batt * 10.05, SMLSIZE + PREC1 + battFlags)
   lcd.drawText(lcd.getLastPos(), battPos1, "V", SMLSIZE + battFlags)
-  local rssiFlags = 0
-  if (telemFlags > 0 or data.rssi < data.rssiLow) then
-    rssiFlags = INVERS + BLINK
-  end
+  rssiFlags = (telemFlags > 0 or data.rssi < data.rssiLow) and FLASH or 0
   lcd.drawText(22, 57, rssi .. "dB", SMLSIZE + rssiFlags)
 
   -- *** Bar graphs ***
