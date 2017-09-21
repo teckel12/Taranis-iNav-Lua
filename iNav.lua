@@ -23,6 +23,9 @@ local telemFlags = -1
 local battlow = false
 local showMax = false
 local showDir = true
+local showCurr = true
+local battPos1 = 49
+local battPos2 = 49
 
 -- modes
 --  t = text
@@ -197,14 +200,13 @@ local function flightModes()
         beep = true
       end
       battlow = true
-    else
-      battNextPlay = 0
-    end
-    if (data.cell < 3.50) then
+    elseif (data.cell < 3.50) then
       if (not battlow) then
         playFile(wavPath .. "batlow.wav")
         battlow = true
       end
+    else
+      battNextPlay = 0
     end
     if (headFree or modes[modeId].f > 0) then
       beep = true
@@ -220,10 +222,10 @@ local function flightModes()
     end
     if (beep) then
       playTone(2000, 100, 3000, PLAY_NOW)
-    end    
-  end
-  if (data.fuel > 20) then
+    end
+  else
     battlow = false
+    battPercentPlayed = 100
   end
   modeIdPrev = modeId
   headingHoldPrev = headingHold
@@ -267,6 +269,14 @@ local function init()
   data.timer = 0
   data.distLastPositive = 0
   data.gpsHome = false
+  if (data.current_id == -1 or data.fuel_id == -1) then
+    showCurr = false
+    data.current = 0
+    data.currentMax = 0
+    data.fuel = 100
+    battPos1 = 45
+    battPos2 = 41
+  end
 end
 
 local function background()
@@ -282,17 +292,19 @@ local function background()
     data.altitude = getValue(data.altitude_id)
     data.distance = math.floor(getValue(data.distance_id) * 3.28084 + 0.5)
     data.speed = getValue(data.speed_id)
-    data.current = getValue(data.current_id)
+    if (showCurr) then
+      data.current = getValue(data.current_id)
+      data.currentMax = getValue(data.currentMax_id)
+      data.fuel = getValue(data.fuel_id)
+    end
     data.altitudeMax = getValue(data.altitudeMax_id)
     data.distanceMax = getValue(data.distanceMax_id)
     data.speedMax = getValue(data.speedMax_id)
-    data.currentMax = getValue(data.currentMax_id)
     data.batt = getValue(data.batt_id)
     data.battMin = getValue(data.battMin_id)
     data.cells = math.floor(data.batt / 4.3) + 1
     data.cell = data.batt / data.cells
     data.cellMin = data.battMin / data.cells
-    data.fuel = getValue(data.fuel_id)
     data.rssiMin = getValue(data.rssiMin_id)
     data.txBatt = getValue(data.txBatt_id)
     data.rssiLast = data.rssi
@@ -463,8 +475,10 @@ local function run(event)
     lcd.drawText(15, 9, "\192", SMLSIZE)
     lcd.drawText(0, 17, "Dst\192", SMLSIZE)
     lcd.drawText(0, 25, "Spd\192", SMLSIZE)
-    lcd.drawText(0, 33, "Cur\192", SMLSIZE)
-    lcd.drawText(0, 49, "Bat\193", SMLSIZE)
+    if (showCurr) then
+      lcd.drawText(0, 33, "Cur\192", SMLSIZE)
+    end
+    lcd.drawText(0, battPos1, "Bat\193", SMLSIZE)
     lcd.drawText(0, 57, "RSI", SMLSIZE)
     lcd.drawText(15, 57, "\193", SMLSIZE)
   else
@@ -477,11 +491,12 @@ local function run(event)
     lcd.drawText(0,  9, "Altd ", SMLSIZE)
     lcd.drawText(0, 17, "Dist", SMLSIZE)
     lcd.drawText(0, 25, "Sped", SMLSIZE)
-    lcd.drawText(0, 33, "Curr", SMLSIZE)
-    lcd.drawText(0, 49, "Batt", SMLSIZE)
+    if (showCurr) then
+      lcd.drawText(0, 33, "Curr", SMLSIZE)
+    end
+    lcd.drawText(0, battPos1, "Batt", SMLSIZE)
     lcd.drawText(0, 57, "RSSI", SMLSIZE)
   end
-  lcd.drawText(0, 41, "Fuel", SMLSIZE)
   lcd.drawText(22, 9, math.floor(altd + 0.5), SMLSIZE + telemFlags)
   if (altd < 1000) then
     lcd.drawText(lcd.getLastPos(), 9, "ft", SMLSIZE + telemFlags)
@@ -497,17 +512,20 @@ local function run(event)
   if (sped < 100) then
     lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE + telemFlags)
   end
-  lcd.drawNumber(22, 33, curr * 10.05, SMLSIZE + PREC1 + telemFlags)
-  if (curr < 100) then
-    lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE + telemFlags)
-  end
   local battFlags = 0
   if (telemFlags > 0 or battlow) then
     battFlags = INVERS + BLINK
   end
-  lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)
-  lcd.drawNumber(22, 49, batt * 10.05, SMLSIZE + PREC1 + battFlags)
-  lcd.drawText(lcd.getLastPos(), 49, "V", SMLSIZE + battFlags)
+  if (showCurr) then
+    lcd.drawNumber(22, 33, curr * 10.05, SMLSIZE + PREC1 + telemFlags)
+    if (curr < 100) then
+      lcd.drawText(lcd.getLastPos(), 33, "A", SMLSIZE + telemFlags)
+    end
+    lcd.drawText(0, 41, "Fuel", SMLSIZE)
+    lcd.drawText(22, 41, data.fuel .. "%", SMLSIZE + battFlags)
+  end
+  lcd.drawNumber(22, battPos1, batt * 10.05, SMLSIZE + PREC1 + battFlags)
+  lcd.drawText(lcd.getLastPos(), battPos1, "V", SMLSIZE + battFlags)
   local rssiFlags = 0
   if (telemFlags > 0 or data.rssi < data.rssiLow) then
     rssiFlags = INVERS + BLINK
@@ -515,13 +533,15 @@ local function run(event)
   lcd.drawText(22, 57, rssi .. "dB", SMLSIZE + rssiFlags)
 
   -- *** Bar graphs ***
-  lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
-  if (data.fuel == 0) then
-    lcd.drawLine(47, 42, 47, 46, SOLID, ERASE)
+  if (showCurr) then
+    lcd.drawGauge(46, 41, 82, 7, math.min(data.fuel, 98), 100)
+    if (data.fuel == 0) then
+      lcd.drawLine(47, 42, 47, 46, SOLID, ERASE)
+    end
   end
-  lcd.drawGauge(46, 49, 82, 7, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
+  lcd.drawGauge(46, battPos2, 82, 56 - battPos2, math.min(math.max(data.cell - 3.3, 0) * 111.1, 98), 100)
   min = 80 * (math.min(math.max(data.cellMin - 3.3, 0) * 111.1, 99) / 100) + 47
-  lcd.drawLine(min, 50, min, 54, SOLID, ERASE)
+  lcd.drawLine(min, battPos2 + 1, min, 54, SOLID, ERASE)
   local rssiGauge = math.max(math.min((data.rssiLast - data.rssiCrit) / (100 - data.rssiCrit) * 100, 98), 0)
   lcd.drawGauge(46, 57, 82, 7, rssiGauge, 100)
   min = 80 * (math.max(math.min((data.rssiMin - data.rssiCrit) / (100 - data.rssiCrit) * 100, 99), 0) / 100) + 47
