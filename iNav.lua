@@ -1,8 +1,6 @@
 -- Taranis iNav Flight Status Panel - v1.0
 -- Author: teckel12
--- https://github.com/teckel12/Taranis-iNav-Lua
--- Telemetry distance sensor name must be changed from '0420' to 'Dist'
--- Sensors must be changed to US measurements (all values displayed in US measurements)
+-- Docs: https://github.com/teckel12/Taranis-iNav-Lua
 -- Use at your own risk!
 -- QX7 LCD_W = 128 / LCD_H = 64
 -- X9D/X9D+/X9E LCD_W = 212 / LCD_H = 64
@@ -40,7 +38,7 @@ local modes = {
   { t="ANGLE",     f=0,              a=true,  w="anglmd.wav" },
   { t="ACRO",      f=0,              a=true,  w="acromd.wav" },
   { t=" NOT OK ",  f=BLINK + INVERS, a=false, w=false },
-  { t="READY",     f=0,              a=false, w=false },
+  { t="READY",     f=0,              a=false, w="ready.wav" },
   { t="POS HOLD",  f=0,              a=true,  w="poshld.wav" },
   { t="3D HOLD",   f=0,              a=true,  w="3dhold.wav" },
   { t="WAYPOINT",  f=0,              a=false, w="waypt.wav" },
@@ -150,7 +148,7 @@ local function flightModes()
   end
   if (modeIdPrev and modeIdPrev ~= modeId) then
     if (not armed and modeId == 6 and modeIdPrev == 5) then
-      playFile(wavPath .. "ready.wav")
+      playFile(wavPath .. modes[modeId].w)
     end
     if (armed) then
       if (modes[modeId].w) then
@@ -285,6 +283,7 @@ local function init()
     battPos1 = 45
     battPos2 = 41
   end
+  qx7 = (LCD_W < 212)
 end
 
 local function background()
@@ -340,7 +339,7 @@ local function background()
   --  end
   --end
 
-  if (armed and type(data.gpsLatLon) == "table" and type(data.gpsHome) ~= "table") then
+  if (armed and gpsFix and type(data.gpsLatLon) == "table" and type(data.gpsHome) ~= "table") then
     data.gpsHome = data.gpsLatLon
   end
 end
@@ -556,11 +555,11 @@ local function run(event)
   min = 80 * (math.max(math.min((data.rssiMin - data.rssiCrit) / (100 - data.rssiCrit) * 100, 99), 0) / 100) + 47
   lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
 
-  -- *** Altitude graph for wide screens ***
-  if (LCD_W >= 212) then
-    lcd.drawRectangle(135, 9, LCD_W - 135, 55, SOLID)
+  -- *** Altitude graph for X9D ***
+  if (not qx7) then
+    lcd.drawRectangle(200, 9, 212, 55, SOLID)
     height = math.max(math.min(math.ceil(data.altitude / 400 * 53), 53), 1)
-    lcd.drawFilledRectangle(136, 63 - height, LCD_W - 137, height, INVERS)
+    lcd.drawFilledRectangle(201, 63 - height, 211, height, INVERS)
   end
 
   return 1
