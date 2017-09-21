@@ -200,14 +200,13 @@ local function flightModes()
         beep = true
       end
       battlow = true
-    else
-      battNextPlay = 0
-    end
-    if (data.cell < 3.50) then
+    elseif (data.cell < 3.50) then
       if (not battlow) then
         playFile(wavPath .. "batlow.wav")
         battlow = true
       end
+    else
+      battNextPlay = 0
     end
     if (headFree or modes[modeId].f > 0) then
       beep = true
@@ -223,11 +222,18 @@ local function flightModes()
     end
     if (beep) then
       playTone(2000, 100, 3000, PLAY_NOW)
-    end    
-  end
-  if (showCurr and data.fuel > 20) then
+    end
+  else
     battlow = false
+    battPercentPlayed = 100
   end
+  --if (showCurr and data.fuel > 20) then
+  --  if (data.cell > 3.50) then
+  --    battlow = false
+  --  end
+  --elseif (not showCurr and data.cell > 3.50) then
+  --  battlow = false
+  --end
   modeIdPrev = modeId
   headingHoldPrev = headingHold
   altHoldPrev = altHold
