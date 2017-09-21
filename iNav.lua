@@ -15,6 +15,8 @@ local modeIdPrev = false
 local armedPrev = false
 local headingHoldPrev = false
 local altHoldPrev = false
+local gpsFixPrev = false
+local gpsFix = false
 local headingRef = -1
 local altNextPlay = 0
 local battNextPlay = 0
@@ -122,24 +124,29 @@ local function flightModes()
   -- *** Audio feedback on flight modes ***
   local vibrate = false
   local beep = false
-  if (armed ~= armedPrev) then
-    if (armed) then
-      data.timerStart = getTime()
-      data.distLastPositive = 0
-      headingRef = data.heading
-      data.gpsHome = false
-      battPercentPlayed = 100
-      battlow = false
-      showMax = false
-      showDir = false
-      playFile(wavPath .. "engarm.wav")
-    else
-      if (data.distLastPositive < 15) then
-        headingRef = -1
-        showDir = true
-      end
-      playFile(wavPath .. "engdrm.wav")
+  if (armed and not armedPrev) then
+    data.timerStart = getTime()
+    data.distLastPositive = 0
+    headingRef = data.heading
+    data.gpsHome = false
+    battPercentPlayed = 100
+    battlow = false
+    showMax = false
+    showDir = false
+    playFile(wavPath .. "engarm.wav")
+  elseif (not armed and armedPrev) then
+    if (data.distLastPositive < 15) then
+      headingRef = -1
+      showDir = true
     end
+    playFile(wavPath .. "engdrm.wav")
+  end
+  if (gpsFix and not gpsFixPrev) then
+    playFile(wavPath .. "gps.wav")
+    playFile(wavPath .. "good.wav")
+  elseif (not gpsFix and gpsFixPrev) then
+    playFile(wavPath .. "gps.wav")
+    playFile(wavPath .. "lost.wav")
   end
   if (modeIdPrev and modeIdPrev ~= modeId) then
     if (not armed and modeId == 6 and modeIdPrev == 5) then
@@ -231,6 +238,7 @@ local function flightModes()
   headingHoldPrev = headingHold
   altHoldPrev = altHold
   armedPrev = armed
+  gpsFixPrev = gpsFix
 end
 
 local function init()
@@ -308,10 +316,11 @@ local function background()
     data.rssiMin = getValue(data.rssiMin_id)
     data.txBatt = getValue(data.txBatt_id)
     data.rssiLast = data.rssi
-    telemFlags = 0
     if (data.distance > 0) then
       data.distLastPositive = data.distance
     end
+    gpsFix = (type(data.gpsLatLon) == "table" and data.satellites > 3900)
+    telemFlags = 0
   else
     data.telemetry = false
     telemFlags = INVERS + BLINK
@@ -430,7 +439,7 @@ local function run(event)
       lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
     end
   end
-  if (not showDir and type(data.gpsHome) == "table" and type(data.gpsLatLon) == "table" and data.distLastPositive >= 25) then
+  if (not showDir and type(data.gpsLatLon) == "table" and type(data.gpsHome) == "table" and data.distLastPositive >= 25) then
     o1 = math.rad(data.gpsHome["lat"])
     a1 = math.rad(data.gpsHome["lon"])
     o2 = math.rad(data.gpsLatLon["lat"])
