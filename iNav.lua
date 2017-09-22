@@ -290,25 +290,6 @@ local function init()
   end
 end
 
-local function drawDirection()
-    local rad1 = math.rad(headingDisplay)
-    local rad2 = math.rad(headingDisplay + width)
-    local rad3 = math.rad(headingDisplay - width)
-    local x1 = math.floor(math.sin(rad1) * size + 0.5) + centerx
-    local y1 = centery - math.floor(math.cos(rad1) * size + 0.5)
-    local x2 = math.floor(math.sin(rad2) * size + 0.5) + centerx
-    local y2 = centery - math.floor(math.cos(rad2) * size + 0.5)
-    local x3 = math.floor(math.sin(rad3) * size + 0.5) + centerx
-    local y3 = centery - math.floor(math.cos(rad3) * size + 0.5)
-    lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
-    lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
-    if (headingHold and armed) then
-      lcd.drawFilledRectangle((x2 + x3) / 2 - 1.5, (y2 + y3) / 2 - 1.5, 4, 4, SOLID)
-    else
-      lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
-    end
-end
-
 local function background()
   data.rssi = getValue(data.rssi_id)
   if (data.rssi > 0 or telemFlags < 0) then
@@ -365,6 +346,25 @@ local function background()
   if (armed and gpsFix and type(data.gpsLatLon) == "table" and type(data.gpsHome) ~= "table") then
     data.gpsHome = data.gpsLatLon
   end
+end
+
+local function drawDirection(headingDisplay, width, size, centerx, centery)
+    local rad1 = math.rad(headingDisplay)
+    local rad2 = math.rad(headingDisplay + width)
+    local rad3 = math.rad(headingDisplay - width)
+    local x1 = math.floor(math.sin(rad1) * size + 0.5) + centerx
+    local y1 = centery - math.floor(math.cos(rad1) * size + 0.5)
+    local x2 = math.floor(math.sin(rad2) * size + 0.5) + centerx
+    local y2 = centery - math.floor(math.cos(rad2) * size + 0.5)
+    local x3 = math.floor(math.sin(rad3) * size + 0.5) + centerx
+    local y3 = centery - math.floor(math.cos(rad3) * size + 0.5)
+    lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
+    lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
+    if (headingHold and armed) then
+      lcd.drawFilledRectangle((x2 + x3) / 2 - 1.5, (y2 + y3) / 2 - 1.5, 4, 4, SOLID)
+    else
+      lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
+    end
 end
 
 local function run(event)
@@ -434,38 +434,34 @@ local function run(event)
   if (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or event == EVT_ENTER_BREAK) then
     showDir = not showDir
   end
-  centery = 19
-  centerx = QX7 and 67 or 70
   if (data.telemetry) then
+    local indicatorDisplayed = false
     if (showDir or headingRef < 0 or not QX7) then
-      headingDisplay = data.heading
+      local centerx = QX7 and 67 or 70
       lcd.drawText(centerx - 2, 9, "N " .. math.floor(data.heading + 0.5) .. "\64", SMLSIZE)
       lcd.drawText(centerx + 10, 21, "E", SMLSIZE)
       lcd.drawText(centerx - 14, 21, "W", SMLSIZE)
-      size = 7
-      width = 135
-      centery = 23
-      drawDirection()
+      drawDirection(data.heading, 135, 7, centerx, 23)
+      indicatorDisplayed = true
     end
     if (not showDir or headingRef >= 0 or not QX7) then
-      headingDisplay = data.heading - headingRef
-      size = 10
-      width = 145
-      centerx = QX7 and 67 or 140
-      drawDirection()
+      if (not indicatorDisplayed or not QX7) then
+        drawDirection(data.heading - headingRef, 145, 10, QX7 and 67 or 140, 19)
+      end
     end
   end
   if (type(data.gpsLatLon) == "table" and type(data.gpsHome) == "table" and data.distLastPositive >= 25) then
     if (not showDir or not QX7) then
-      centerx = QX7 and 67 or 110
-      o1 = math.rad(data.gpsHome["lat"])
-      a1 = math.rad(data.gpsHome["lon"])
-      o2 = math.rad(data.gpsLatLon["lat"])
-      a2 = math.rad(data.gpsLatLon["lon"])
-      y = math.sin(a2 - a1) * math.cos(o2)
-      x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
-      bearing = math.deg(math.atan2(y, x)) - headingRef
-      size = QX7 and 10 or 12
+      local centerx = QX7 and 67 or 110
+      local centery = 19
+      local o1 = math.rad(data.gpsHome["lat"])
+      local a1 = math.rad(data.gpsHome["lon"])
+      local o2 = math.rad(data.gpsLatLon["lat"])
+      local a2 = math.rad(data.gpsLatLon["lon"])
+      local y = math.sin(a2 - a1) * math.cos(o2)
+      local x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
+      local bearing = math.deg(math.atan2(y, x)) - headingRef
+      local size = QX7 and 10 or 12
       local rad1 = math.rad(bearing)
       local x1 = math.floor(math.sin(rad1) * size + 0.5) + centerx
       local y1 = centery - math.floor(math.cos(rad1) * size + 0.5)
