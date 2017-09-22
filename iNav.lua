@@ -6,9 +6,14 @@
 -- X9D/X9D+/X9E LCD_W = 212 / LCD_H = 64
 -- X10/X12S LCD_W = 480 / LCD_H = 272
 
-local wavPath = "/SCRIPTS/TELEMETRY/iNav/"
+local TEST = true
+local WAVPATH = "/SCRIPTS/TELEMETRY/iNav/"
+local FLASH = INVERS + BLINK
+local QX7 = (LCD_W < 212)
+local TIMER_POS = (QX7) and 60 or 150
+local RXBATT_POS = LCD_W - 17
+local RIGHT_POS = (QX7) and 129 or 195
 
---local test = true
 local modeIdPrev = false
 local armedPrev = false
 local headingHoldPrev = false
@@ -131,28 +136,28 @@ local function flightModes()
     battlow = false
     showMax = false
     showDir = false
-    playFile(wavPath .. "engarm.wav")
+    playFile(WAVPATH .. "engarm.wav")
   elseif (not armed and armedPrev) then
     if (data.distLastPositive < 15) then
       headingRef = -1
       showDir = true
     end
-    playFile(wavPath .. "engdrm.wav")
+    playFile(WAVPATH .. "engdrm.wav")
   end
   if (gpsFix and not gpsFixPrev) then
-    playFile(wavPath .. "gps.wav")
-    playFile(wavPath .. "good.wav")
+    playFile(WAVPATH .. "gps.wav")
+    playFile(WAVPATH .. "good.wav")
   elseif (not gpsFix and gpsFixPrev) then
-    playFile(wavPath .. "gps.wav")
-    playFile(wavPath .. "lost.wav")
+    playFile(WAVPATH .. "gps.wav")
+    playFile(WAVPATH .. "lost.wav")
   end
   if (modeIdPrev and modeIdPrev ~= modeId) then
     if (not armed and modeId == 6 and modeIdPrev == 5) then
-      playFile(wavPath .. modes[modeId].w)
+      playFile(WAVPATH .. modes[modeId].w)
     end
     if (armed) then
       if (modes[modeId].w) then
-        playFile(wavPath .. modes[modeId].w)
+        playFile(WAVPATH .. modes[modeId].w)
       end
       if (modes[modeId].f > 0) then
         vibrate = true
@@ -161,17 +166,17 @@ local function flightModes()
   end
   if (armed) then
     if (altHold and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile(wavPath .. "althld.wav")
-      playFile(wavPath .. "active.wav")
+      playFile(WAVPATH .. "althld.wav")
+      playFile(WAVPATH .. "active.wav")
     elseif (not altHold and modes[modeId].a and altHoldPrev ~= altHold) then
-      playFile(wavPath .. "althld.wav")
-      playFile(wavPath .. "off.wav")
+      playFile(WAVPATH .. "althld.wav")
+      playFile(WAVPATH .. "off.wav")
     end
     if (headingHold and headingHoldPrev ~= headingHold) then
-      playFile(wavPath .. "hedhlda.wav")
+      playFile(WAVPATH .. "hedhlda.wav")
     elseif (not headingHold and headingHoldPrev ~= headingHold) then
-      playFile(wavPath .. "hedhld.wav")
-      playFile(wavPath .. "off.wav")
+      playFile(WAVPATH .. "hedhld.wav")
+      playFile(WAVPATH .. "off.wav")
     end
     if (data.altitude > 400) then
       if (getTime() > altNextPlay) then
@@ -183,18 +188,18 @@ local function flightModes()
     end
     if (battPercentPlayed > data.fuel) then
       if (data.fuel == 30 or data.fuel == 25) then
-        playFile(wavPath .. "batlow.wav")
+        playFile(WAVPATH .. "batlow.wav")
         playNumber(data.fuel, 13)
         battPercentPlayed = data.fuel
       elseif (data.fuel % 10 == 0 and data.fuel < 100 and data.fuel >= 40) then
-        playFile(wavPath .. "battry.wav")
+        playFile(WAVPATH .. "battry.wav")
         playNumber(data.fuel, 13)
         battPercentPlayed = data.fuel
       end
     end
     if (data.fuel <= 20 or data.cell < 3.40) then
       if (getTime() > battNextPlay) then
-        playFile(wavPath .. "batcrt.wav")
+        playFile(WAVPATH .. "batcrt.wav")
         if (data.fuel <= 20 and battPercentPlayed > data.fuel) then
           playNumber(data.fuel, 13)
           battPercentPlayed = data.fuel
@@ -207,7 +212,7 @@ local function flightModes()
       battlow = true
     elseif (data.cell < 3.50) then
       if (not battlow) then
-        playFile(wavPath .. "batlow.wav")
+        playFile(WAVPATH .. "batlow.wav")
         battlow = true
       end
     else
@@ -283,7 +288,25 @@ local function init()
     battPos1 = 45
     battPos2 = 41
   end
-  qx7 = (LCD_W < 212)
+end
+
+local function drawDirection()
+    local rad1 = math.rad(headingDisplay)
+    local rad2 = math.rad(headingDisplay + width)
+    local rad3 = math.rad(headingDisplay - width)
+    local x1 = math.floor(math.sin(rad1) * size + 0.5) + centerx
+    local y1 = centery - math.floor(math.cos(rad1) * size + 0.5)
+    local x2 = math.floor(math.sin(rad2) * size + 0.5) + centerx
+    local y2 = centery - math.floor(math.cos(rad2) * size + 0.5)
+    local x3 = math.floor(math.sin(rad3) * size + 0.5) + centerx
+    local y3 = centery - math.floor(math.cos(rad3) * size + 0.5)
+    lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
+    lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
+    if (headingHold and armed) then
+      lcd.drawFilledRectangle((x2 + x3) / 2 - 1.5, (y2 + y3) / 2 - 1.5, 4, 4, SOLID)
+    else
+      lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
+    end
 end
 
 local function background()
@@ -322,13 +345,13 @@ local function background()
     telemFlags = 0
   else
     data.telemetry = false
-    telemFlags = INVERS + BLINK
+    telemFlags = FLASH
   end
 
   flightModes()
 
   -- Fix GPS coords and distance
-  --if (test and type(data.gpsLatLon) == "table") then
+  --if (TEST and type(data.gpsLatLon) == "table") then
   --  data.gpsLatLon["lat"] = math.deg(data.gpsLatLon["lat"])
   --  data.gpsLatLon["lon"] = math.deg(data.gpsLatLon["lon"]) * 2.1064
   --  if (type(data.gpsHome) == "table") then
@@ -361,103 +384,100 @@ local function run(event)
   end
   lcd.drawFilledRectangle(0, 0, LCD_W, 8)
   lcd.drawText(0 , 0, data.modelName, INVERS)
-  lcd.drawTimer(60, 1, data.timer, SMLSIZE + TIMEHOUR + INVERS)
+  lcd.drawTimer(TIMER_POS, 1, data.timer, SMLSIZE + INVERS)
   lcd.drawFilledRectangle(86, 1, 19, 6, ERASE)
   lcd.drawLine(105, 2, 105, 5, SOLID, ERASE)
   local battGauge = math.max(math.min((data.txBatt - data.txBattMin) / (data.txBattMax - data.txBattMin) * 17, 17), 0) + 86
   for i = 87, battGauge, 2 do
     lcd.drawLine(i, 2, i, 5, SOLID, FORCE)
   end
+  if (not QX7) then
+    lcd.drawNumber(110 , 1, data.txBatt * 10.05, SMLSIZE + PREC1 + INVERS)
+    lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
+  end
   if (data.rxBatt > 0 and data.telemetry) then
-    lcd.drawNumber(111, 1, data.rxBatt * 10.05, SMLSIZE + PREC1 + INVERS)
+    lcd.drawNumber(RXBATT_POS, 1, data.rxBatt * 10.05, SMLSIZE + PREC1 + INVERS)
     lcd.drawText(lcd.getLastPos(), 1, "V", SMLSIZE + INVERS)
   end
 
   -- *** GPS Coords ***
   if (type(data.gpsLatLon) == "table") then
+    gpsFlags = (telemFlags > 0 or not gpsFix) and FLASH or 0
     value = math.floor(data.gpsAlt + 0.5) .. "ft"
     lcd.drawText(85, 9, value, SMLSIZE)
-    pos = 85 + (129 - lcd.getLastPos())
-    lcd.drawText(pos, 17, value, SMLSIZE + telemFlags)
+    pos = 85 + (RIGHT_POS - lcd.getLastPos())
+    lcd.drawText(pos, 17, value, SMLSIZE + gpsFlags)
 
     value = string.format("%.4f", data.gpsLatLon["lat"])
     lcd.drawText(85, 9, value, SMLSIZE)
-    pos = 85 + (129 - lcd.getLastPos())
-    lcd.drawText(pos, 25, value, SMLSIZE + telemFlags)
+    pos = 85 + (RIGHT_POS - lcd.getLastPos())
+    lcd.drawText(pos, 25, value, SMLSIZE + gpsFlags)
 
     value = string.format("%.4f", data.gpsLatLon["lon"])
     lcd.drawText(85, 9, value, SMLSIZE)
-    pos = 85 + (129 - lcd.getLastPos())
-    lcd.drawText(pos, 33, value, SMLSIZE + telemFlags)
+    pos = 85 + (RIGHT_POS - lcd.getLastPos())
+    lcd.drawText(pos, 33, value, SMLSIZE + gpsFlags)
   else
-    lcd.drawFilledRectangle(88, 17, 40, 23, INVERS)
-    lcd.drawText(92, 20, "No GPS", INVERS)
-    lcd.drawText(101, 30, "Fix", INVERS)
+    lcd.drawFilledRectangle(RIGHT_POS - 41, 17, 41, 23, INVERS)
+    lcd.drawText(RIGHT_POS - 37, 20, "No GPS", INVERS)
+    lcd.drawText(RIGHT_POS - 28, 30, "Fix", INVERS)
   end
 
   -- *** Satellites ***
   value = "Sats " .. tonumber(string.sub(data.satellites, -2))
   lcd.drawText(85, 9, value, SMLSIZE)
-  pos = 85 + (129 - lcd.getLastPos())
-  lcd.drawText(85, 9, "         ", SMLSIZE)
+  pos = 85 + (RIGHT_POS - lcd.getLastPos())
+  lcd.drawText(85, 9, "           ", SMLSIZE)
   lcd.drawText(pos, 9, value, SMLSIZE + telemFlags)
 
   -- *** Directional indicator ***
   if (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or event == EVT_ENTER_BREAK) then
     showDir = not showDir
   end
-  center = 19
+  centery = 19
+  centerx = QX7 and 67 or 70
   if (data.telemetry) then
-    if (showDir or headingRef < 0) then
+    if (showDir or headingRef < 0 or not QX7) then
       headingDisplay = data.heading
-      lcd.drawText(65, 9, "N " .. math.floor(data.heading + 0.5) .. "\64", SMLSIZE)
-      lcd.drawText(77, 21, "E", SMLSIZE)
-      lcd.drawText(53, 21, "W", SMLSIZE)
+      lcd.drawText(centerx - 2, 9, "N " .. math.floor(data.heading + 0.5) .. "\64", SMLSIZE)
+      lcd.drawText(centerx + 10, 21, "E", SMLSIZE)
+      lcd.drawText(centerx - 14, 21, "W", SMLSIZE)
       size = 7
       width = 135
-      center = 23
-    elseif (headingRef >= 0) then
+      centery = 23
+      drawDirection()
+    end
+    if (not showDir or headingRef >= 0 or not QX7) then
       headingDisplay = data.heading - headingRef
       size = 10
       width = 145
-    end
-    local rad1 = math.rad(headingDisplay)
-    local rad2 = math.rad(headingDisplay + width)
-    local rad3 = math.rad(headingDisplay - width)
-    local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
-    local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
-    local x2 = math.floor(math.sin(rad2) * size + 0.5) + 67
-    local y2 = center - math.floor(math.cos(rad2) * size + 0.5)
-    local x3 = math.floor(math.sin(rad3) * size + 0.5) + 67
-    local y3 = center - math.floor(math.cos(rad3) * size + 0.5)
-    lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
-    lcd.drawLine(x1, y1, x3, y3, SOLID, FORCE)
-    if (headingHold and armed) then
-      lcd.drawFilledRectangle((x2 + x3) / 2 - 1.5, (y2 + y3) / 2 - 1.5, 4, 4, SOLID)
-    else
-      lcd.drawLine(x2, y2, x3, y3, DOTTED, FORCE)
+      centerx = QX7 and 67 or 140
+      drawDirection()
     end
   end
-  if (not showDir and type(data.gpsLatLon) == "table" and type(data.gpsHome) == "table" and data.distLastPositive >= 25) then
-    o1 = math.rad(data.gpsHome["lat"])
-    a1 = math.rad(data.gpsHome["lon"])
-    o2 = math.rad(data.gpsLatLon["lat"])
-    a2 = math.rad(data.gpsLatLon["lon"])
-    y = math.sin(a2 - a1) * math.cos(o2)
-    x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
-    bearing = math.deg(math.atan2(y, x)) - headingRef
-    size = 10
-    local rad1 = math.rad(bearing)
-    local x1 = math.floor(math.sin(rad1) * size + 0.5) + 67
-    local y1 = center - math.floor(math.cos(rad1) * size + 0.5)
-    lcd.drawLine(67, center, x1, y1, DOTTED, FORCE)
-    lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, ERASE)
-    lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, SOLID)
+  if (type(data.gpsLatLon) == "table" and type(data.gpsHome) == "table" and data.distLastPositive >= 25) then
+    if (not showDir or not QX7) then
+      centerx = QX7 and 67 or 110
+      o1 = math.rad(data.gpsHome["lat"])
+      a1 = math.rad(data.gpsHome["lon"])
+      o2 = math.rad(data.gpsLatLon["lat"])
+      a2 = math.rad(data.gpsLatLon["lon"])
+      y = math.sin(a2 - a1) * math.cos(o2)
+      x = (math.cos(o1) * math.sin(o2)) - (math.sin(o1) * math.cos(o2) * math.cos(a2 - a1))
+      bearing = math.deg(math.atan2(y, x)) - headingRef
+      size = QX7 and 10 or 12
+      local rad1 = math.rad(bearing)
+      local x1 = math.floor(math.sin(rad1) * size + 0.5) + centerx
+      local y1 = centery - math.floor(math.cos(rad1) * size + 0.5)
+      lcd.drawLine(centerx, centery, x1, y1, DOTTED, FORCE)
+      lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, ERASE)
+      lcd.drawFilledRectangle(x1 - 1, y1 - 1, 3, 3, SOLID)
+    end
   end
 
   -- *** Head free warning ***
   if (armed and headFree) then
-    lcd.drawText(85, 9, "HF", SMLSIZE + INVERS + BLINK)
+    lcd.drawText(85, 9, "HF", SMLSIZE + FLASH)
   end
 
   -- *** Display flight mode (centered) ***
@@ -520,10 +540,7 @@ local function run(event)
   if (sped < 100) then
     lcd.drawText(lcd.getLastPos(), 25, "mph", SMLSIZE + telemFlags)
   end
-  local battFlags = 0
-  if (telemFlags > 0 or battlow) then
-    battFlags = INVERS + BLINK
-  end
+  battFlags = (telemFlags > 0 or battlow) and FLASH or 0
   if (showCurr) then
     lcd.drawNumber(22, 33, curr * 10.05, SMLSIZE + PREC1 + telemFlags)
     if (curr < 100) then
@@ -534,10 +551,7 @@ local function run(event)
   end
   lcd.drawNumber(22, battPos1, batt * 10.05, SMLSIZE + PREC1 + battFlags)
   lcd.drawText(lcd.getLastPos(), battPos1, "V", SMLSIZE + battFlags)
-  local rssiFlags = 0
-  if (telemFlags > 0 or data.rssi < data.rssiLow) then
-    rssiFlags = INVERS + BLINK
-  end
+  rssiFlags = (telemFlags > 0 or data.rssi < data.rssiLow) and FLASH or 0
   lcd.drawText(22, 57, rssi .. "dB", SMLSIZE + rssiFlags)
 
   -- *** Bar graphs ***
@@ -556,7 +570,7 @@ local function run(event)
   lcd.drawLine(min, 58, min, 62, SOLID, ERASE)
 
   -- *** Altitude graph for X9D ***
-  if (not qx7) then
+  if (not QX7) then
     lcd.drawRectangle(200, 9, 212, 55, SOLID)
     height = math.max(math.min(math.ceil(data.altitude / 400 * 53), 53), 1)
     lcd.drawFilledRectangle(201, 63 - height, 211, height, INVERS)
