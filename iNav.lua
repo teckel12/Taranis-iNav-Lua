@@ -455,7 +455,6 @@ local function run(event)
       drawDirection()
     end
   end
-  data.distLastPositive = 50
   if (type(data.gpsLatLon) == "table" and type(data.gpsHome) == "table" and data.distLastPositive >= 25) then
     if (not showDir or not QX7) then
       centerx = QX7 and 67 or 110
