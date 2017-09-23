@@ -1,3 +1,5 @@
+# [Development Moved to iNav Repo](https://github.com/iNavFlight/LuaTelemetry)
+
 # Taranis iNav Lua Script
 
 Flight status screen for Taranis transmitter when running iNav
