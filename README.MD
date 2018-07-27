@@ -14,5 +14,3 @@
 ![sample](https://github.com/iNavFlight/LuaTelemetry/blob/master/assets/iNavX9D.png "View on Taranis X9D, X9D+ & X9E")
 
 * ### [Development Moved to iNav Repo](https://github.com/iNavFlight/LuaTelemetry)
-
-test
