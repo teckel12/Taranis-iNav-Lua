@@ -2,7 +2,7 @@
 
 ### Supports SmartPort(S.Port) and F.Port telemetry on X-series receivers
 
-* ### [Development Moved to iNav Repo](https://github.com/iNavFlight/LuaTelemetry)
+* ### [Repo moved to https://github.com/teckel12/LuaTelemetry](https://github.com/teckel12/LuaTelemetry)
 
 ## Screenshots
 
@@ -20,4 +20,4 @@
 ![sample](https://github.com/iNavFlight/LuaTelemetry/blob/master/assets/iNavQX7pilot.png "Pilot view on QX7 and X-Lite")&nbsp;&nbsp;
 ![sample](https://github.com/iNavFlight/LuaTelemetry/blob/master/assets/iNavX9Dpilot.png "Pilot view on Taranis X9D, X9D+ and X9E")
 
-* ### [Development Moved to iNav Repo](https://github.com/iNavFlight/LuaTelemetry)
+* ### [Repo moved to https://github.com/teckel12/LuaTelemetry](https://github.com/teckel12/LuaTelemetry)
